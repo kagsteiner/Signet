@@ -357,9 +357,11 @@
   let selectedRangeForRewrite = null;
 
   function handleSelectionChange() {
+    if (rewriteOverlay.contains(document.activeElement)) return;
+
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) {
-      hideRewriteOverlay();
+      if (!rewriteOverlay.classList.contains('hidden')) return;
       updateGemVisibility();
       return;
     }
