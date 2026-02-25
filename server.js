@@ -159,13 +159,11 @@ async function callOpenAI(systemPrompt, userContent) {
   const OpenAI = require('openai');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
   const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: 'gpt-5.2',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `Continue this text with exactly one sentence:\n\n${userContent}` },
-    ],
-    max_tokens: 80,
-    temperature: 0.8,
+    ]
   });
   return response.choices[0].message.content.trim();
 }
