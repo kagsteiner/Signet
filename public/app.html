@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storytellers</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="header">
+      <button id="story-title-btn" class="story-title" aria-label="Switch story"></button>
+      <div id="save-indicator" class="save-indicator"></div>
+    </header>
+
+    <main id="manuscript">
+      <div id="intent-section" class="intent-section collapsed">
+        <button id="intent-toggle" class="intent-toggle">Story Intent</button>
+        <div id="intent-fields" class="intent-fields">
+          <label for="story-intent">Story Intent</label>
+          <textarea id="story-intent" placeholder="What is this story about? Its themes, arc, tone…" rows="3"></textarea>
+          <label for="chapter-intent">Chapter Intent</label>
+          <textarea id="chapter-intent" placeholder="What should this chapter accomplish?" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div id="editor-container">
+        <div id="editor" contenteditable="true" spellcheck="true" data-placeholder="Begin writing…"></div>
+        <div id="gem-container">
+          <button id="gem" class="gem" aria-label="Continue writing">&#9671;</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Story switching overlay -->
+    <div id="story-overlay" class="story-overlay hidden">
+      <div class="story-overlay-inner">
+        <h2>Stories</h2>
+        <hr>
+        <ul id="story-list"></ul>
+        <div class="overlay-actions">
+          <button id="new-story-btn">+ New Story</button>
+          <button id="export-md-btn">Export as Markdown</button>
+          <button id="export-txt-btn">Export as Plain Text</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rewrite overlay -->
+    <div id="rewrite-overlay" class="rewrite-overlay hidden">
+      <div class="rewrite-inner">
+        <input id="rewrite-input" type="text" placeholder="Transform…" autocomplete="off">
+        <div id="rewrite-preview" class="rewrite-preview hidden">
+          <div id="rewrite-diff"></div>
+          <div class="rewrite-actions">
+            <button id="rewrite-accept">Accept</button>
+            <button id="rewrite-reject">Reject</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard hint (shown once) -->
+    <div id="gem-hint" class="gem-hint hidden">Tip: ⌘↩ continues anywhere.</div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
