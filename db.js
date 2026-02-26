@@ -142,7 +142,7 @@ function getStory(storyId, userId) {
 
 function updateStory(storyId, userId, fields) {
   const d = getDb();
-  const allowed = ['title', 'content_markdown', 'story_intent', 'chapter_intent'];
+  const allowed = ['title', 'content_markdown', 'story_intent'];
   const sets = [];
   const values = [];
   for (const key of allowed) {

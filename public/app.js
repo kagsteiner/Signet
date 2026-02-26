@@ -18,7 +18,6 @@
   const intentSection = document.getElementById('intent-section');
   const intentToggle = document.getElementById('intent-toggle');
   const storyIntentEl = document.getElementById('story-intent');
-  const chapterIntentEl = document.getElementById('chapter-intent');
   const storyOverlay = document.getElementById('story-overlay');
   const storyList = document.getElementById('story-list');
   const newStoryBtn = document.getElementById('new-story-btn');
@@ -73,7 +72,6 @@
     titleBtn.textContent = currentStory.title;
     document.title = `${currentStory.title} — Storytellers`;
     storyIntentEl.value = currentStory.story_intent || '';
-    chapterIntentEl.value = currentStory.chapter_intent || '';
     setEditorContent(currentStory.content_markdown);
     updateGemVisibility();
   }
@@ -172,7 +170,6 @@
         method: 'PUT',
         body: JSON.stringify({
           story_intent: storyIntentEl.value,
-          chapter_intent: chapterIntentEl.value,
         }),
       });
     } catch { /* silent */ }
@@ -299,7 +296,6 @@
         body: JSON.stringify({
           precedingText: precedingText.slice(-2000),
           storyIntent: storyIntentEl.value || null,
-          chapterIntent: chapterIntentEl.value || null,
         }),
       });
 
@@ -558,7 +554,6 @@
 
   intentToggle.addEventListener('click', toggleIntent);
   storyIntentEl.addEventListener('input', scheduleIntentSave);
-  chapterIntentEl.addEventListener('input', scheduleIntentSave);
 
   rewriteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {

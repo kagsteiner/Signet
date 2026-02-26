@@ -117,7 +117,6 @@ After 30 days:
 - title (TEXT NOT NULL)
 - content_markdown (TEXT NOT NULL)
 - story_intent (TEXT)
-- chapter_intent (TEXT)
 - last_modified (INTEGER NOT NULL)
 - created_at (INTEGER NOT NULL)
 
@@ -193,7 +192,6 @@ At top of document, collapsed section:
 
 Contains:
 - Global Story Intent
-- Chapter Intent
 
 These:
 - Not rendered in visible manuscript

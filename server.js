@@ -99,11 +99,11 @@ app.delete('/api/stories/:id', requireAuth, (req, res) => {
 // --- AI Continuation (The Gem) ---
 app.post('/api/continue', requireAuth, async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
-  const { precedingText, storyIntent, chapterIntent } = req.body;
+  const { precedingText, storyIntent } = req.body;
   if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
   try {
-    const systemPrompt = buildContinuationPrompt(storyIntent, chapterIntent);
+    const systemPrompt = buildContinuationPrompt(storyIntent);
     const result = await callOpenAI(systemPrompt, precedingText);
     res.json({ sentence: result });
   } catch (err) {
@@ -138,7 +138,7 @@ app.get('/', (req, res) => {
 
 // --- AI helpers ---
 
-function buildContinuationPrompt(storyIntent, chapterIntent) {
+function buildContinuationPrompt(storyIntent) {
   let prompt = `You are a literary ghost writer. You write exactly one sentence to continue the narrative.
 
 Rules:
@@ -151,7 +151,6 @@ Rules:
 - Never explain yourself. Never add quotes or attribution to your output.`;
 
   if (storyIntent) prompt += `\n\nStory intent (private, for context only): ${storyIntent}`;
-  if (chapterIntent) prompt += `\n\nChapter intent (private, for context only): ${chapterIntent}`;
   return prompt;
 }
 
