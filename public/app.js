@@ -653,6 +653,10 @@
       if (!storyOverlay.classList.contains('hidden')) hideStoryOverlay();
       if (!rewriteOverlay.classList.contains('hidden')) hideRewriteOverlay();
     }
+    // Auto-dismiss transform modal when user types in document (not in modal input)
+    if (!rewriteOverlay.classList.contains('hidden') && !rewriteOverlay.contains(e.target)) {
+      hideRewriteOverlay();
+    }
   });
 
   // --- Start ---
