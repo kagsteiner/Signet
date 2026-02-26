@@ -9,19 +9,11 @@
 <body>
   <div id="app">
     <header id="header">
-      <button id="story-title-btn" class="story-title" aria-label="Switch story"></button>
+      <button id="story-title-btn" class="story-title" aria-label="Open story panel"></button>
       <div id="save-indicator" class="save-indicator"></div>
     </header>
 
     <main id="manuscript">
-      <div id="intent-section" class="intent-section collapsed">
-        <button id="intent-toggle" class="intent-toggle">Story Intent</button>
-        <div id="intent-fields" class="intent-fields">
-          <label for="story-intent">Story Intent</label>
-          <textarea id="story-intent" placeholder="What is this story about? Its themes, arc, tone…" rows="3"></textarea>
-        </div>
-      </div>
-
       <div id="editor-container">
         <div id="editor" contenteditable="true" spellcheck="true" data-placeholder="Begin writing…"></div>
         <div id="gem-container">
@@ -29,6 +21,18 @@
         </div>
       </div>
     </main>
+
+    <div id="story-panel-backdrop" class="story-panel-backdrop hidden" aria-hidden="true"></div>
+    <div id="story-panel" class="story-panel hidden" role="dialog" aria-label="Story panel">
+      <section class="story-panel-section story-panel-intent">
+        <label for="story-intent">Story Intent</label>
+        <textarea id="story-intent" placeholder="Direction, planned chapters, notes…" rows="8"></textarea>
+      </section>
+      <section id="story-panel-chapters" class="story-panel-section story-panel-chapters hidden"></section>
+      <section class="story-panel-section story-panel-manage">
+        <button id="manage-stories-link" class="story-panel-manage-link" type="button">Manage Stories…</button>
+      </section>
+    </div>
 
     <!-- Story switching overlay -->
     <div id="story-overlay" class="story-overlay hidden">

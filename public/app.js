@@ -12,6 +12,7 @@
   let intentSaveTimer = null;
   let isSaving = false;
   let gemHintShown = localStorage.getItem('gemHintShown') === '1';
+  let storyPanelHideTimer = null;
 
   // --- DOM refs ---
   const titleBtn = document.getElementById('story-title-btn');
@@ -19,9 +20,11 @@
   const editor = document.getElementById('editor');
   const gemContainer = document.getElementById('gem-container');
   const gem = document.getElementById('gem');
-  const intentSection = document.getElementById('intent-section');
-  const intentToggle = document.getElementById('intent-toggle');
   const storyIntentEl = document.getElementById('story-intent');
+  const storyPanel = document.getElementById('story-panel');
+  const storyPanelBackdrop = document.getElementById('story-panel-backdrop');
+  const storyPanelChapters = document.getElementById('story-panel-chapters');
+  const manageStoriesLink = document.getElementById('manage-stories-link');
   const storyOverlay = document.getElementById('story-overlay');
   const storyList = document.getElementById('story-list');
   const newStoryBtn = document.getElementById('new-story-btn');
@@ -156,6 +159,7 @@
     }
 
     refreshChapterContextAtCursor();
+    if (!storyPanel.classList.contains('hidden')) renderStoryPanelChapters();
   }
 
   function computeOffsetFromPosition(container, containerOffset) {
@@ -302,8 +306,132 @@
     }
   }
 
+  function getChapterNavItems() {
+    const text = getEditorText();
+    const lines = Chapters.splitLinesWithOffsets
+      ? Chapters.splitLinesWithOffsets(text)
+      : [{ text, trimmed: text.trim(), startOffset: 0, endOffset: text.length }];
+
+    return currentChapters.map((chapter, index) => {
+      let label = chapter.title && chapter.title.text ? chapter.title.text.trim() : '';
+      if (!label) {
+        for (const line of lines) {
+          if (line.startOffset < chapter.startOffset) continue;
+          if (line.startOffset >= chapter.endOffset) break;
+          if (line.trimmed) {
+            label = line.trimmed;
+            break;
+          }
+        }
+      }
+      if (!label) label = 'Untitled';
+
+      return {
+        id: chapter.id || `chapter-${index}`,
+        label,
+        startOffset: chapter.startOffset,
+      };
+    });
+  }
+
+  function getLineElementAtOffset(offset) {
+    const lines = getLineElements();
+    if (lines.length === 0) return null;
+
+    const totalLength = getEditorText().length;
+    let remaining = Math.max(0, Math.min(offset, totalLength));
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const lineLength = getLineRawText(line).length;
+      if (remaining <= lineLength || i === lines.length - 1) return line;
+      remaining -= lineLength;
+      if (remaining > 0) remaining -= 1;
+    }
+    return lines[lines.length - 1];
+  }
+
+  function jumpToChapter(startOffset) {
+    const line = getLineElementAtOffset(startOffset);
+    if (!line) return;
+    line.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    line.classList.add('chapter-jump-highlight');
+    setTimeout(() => line.classList.remove('chapter-jump-highlight'), 550);
+  }
+
+  function positionStoryPanel() {
+    const rect = titleBtn.getBoundingClientRect();
+    const panelWidth = Math.min(420, window.innerWidth - 32);
+    const left = Math.max(16, Math.min(rect.left, window.innerWidth - panelWidth - 16));
+    storyPanel.style.left = `${left}px`;
+    storyPanel.style.top = `${rect.bottom + 10}px`;
+  }
+
+  function renderStoryPanelChapters() {
+    const items = getChapterNavItems();
+    if (items.length <= 2) {
+      storyPanelChapters.classList.add('hidden');
+      storyPanelChapters.replaceChildren();
+      return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'story-panel-chapter-list';
+
+    for (const chapter of items) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'story-panel-chapter-item';
+      item.textContent = chapter.label;
+      item.addEventListener('click', () => {
+        hideStoryPanel();
+        jumpToChapter(chapter.startOffset);
+      });
+      list.appendChild(item);
+    }
+
+    storyPanelChapters.classList.remove('hidden');
+    storyPanelChapters.replaceChildren(list);
+  }
+
+  function showStoryPanel() {
+    if (!storyPanel.classList.contains('hidden')) return;
+    if (storyPanelHideTimer) clearTimeout(storyPanelHideTimer);
+    hideStoryOverlay();
+    positionStoryPanel();
+    renderStoryPanelChapters();
+    storyPanelBackdrop.classList.remove('hidden');
+    storyPanel.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      storyPanelBackdrop.classList.add('open');
+      storyPanel.classList.add('open');
+      storyIntentEl.focus({ preventScroll: true });
+      const len = storyIntentEl.value.length;
+      storyIntentEl.setSelectionRange(len, len);
+    });
+  }
+
+  function hideStoryPanel() {
+    if (storyPanel.classList.contains('hidden')) return;
+    storyPanel.classList.remove('open');
+    storyPanelBackdrop.classList.remove('open');
+    if (storyPanelHideTimer) clearTimeout(storyPanelHideTimer);
+    storyPanelHideTimer = setTimeout(() => {
+      storyPanel.classList.add('hidden');
+      storyPanelBackdrop.classList.add('hidden');
+    }, 170);
+  }
+
+  function toggleStoryPanel() {
+    if (storyPanel.classList.contains('hidden')) {
+      showStoryPanel();
+    } else {
+      hideStoryPanel();
+    }
+  }
+
   // --- Story overlay ---
   async function showStoryOverlay() {
+    hideStoryPanel();
     const data = await api('/api/stories');
     if (!data) return;
     stories = data.stories;
@@ -582,11 +710,6 @@
     }
   }
 
-  // --- Intent toggle ---
-  function toggleIntent() {
-    intentSection.classList.toggle('collapsed');
-  }
-
   // --- Event listeners ---
 
   editor.addEventListener('input', () => {
@@ -613,9 +736,10 @@
 
   document.addEventListener('keydown', handleKeydown);
 
-  titleBtn.addEventListener('click', showStoryOverlay);
+  titleBtn.addEventListener('click', toggleStoryPanel);
   titleBtn.addEventListener('dblclick', (e) => {
     e.stopPropagation();
+    hideStoryPanel();
     hideStoryOverlay();
     promptRenameStory();
   });
@@ -627,9 +751,20 @@
   newStoryBtn.addEventListener('click', createNewStory);
   exportMdBtn.addEventListener('click', exportAsMarkdown);
   exportTxtBtn.addEventListener('click', exportAsPlainText);
-
-  intentToggle.addEventListener('click', toggleIntent);
   storyIntentEl.addEventListener('input', scheduleIntentSave);
+  storyIntentEl.addEventListener('blur', saveIntents);
+  manageStoriesLink.addEventListener('click', () => {
+    hideStoryPanel();
+    showStoryOverlay();
+  });
+  storyPanelBackdrop.addEventListener('click', hideStoryPanel);
+
+  window.addEventListener('resize', () => {
+    if (!storyPanel.classList.contains('hidden')) positionStoryPanel();
+  });
+  window.addEventListener('scroll', () => {
+    if (!storyPanel.classList.contains('hidden')) hideStoryPanel();
+  }, { passive: true });
 
   rewriteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -650,6 +785,7 @@
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (!storyPanel.classList.contains('hidden')) hideStoryPanel();
       if (!storyOverlay.classList.contains('hidden')) hideStoryOverlay();
       if (!rewriteOverlay.classList.contains('hidden')) hideRewriteOverlay();
     }

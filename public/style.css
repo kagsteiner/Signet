@@ -205,6 +205,19 @@ body {
   margin-bottom: 0.5em;
 }
 
+#editor .editor-line.chapter-jump-highlight {
+  animation: chapterJumpFlash 550ms ease-out;
+}
+
+@keyframes chapterJumpFlash {
+  0% {
+    background: rgba(107, 92, 77, 0.18);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
 #editor .chapter-title {
   font-family: var(--serif);
   font-size: 1.35rem;
@@ -274,6 +287,129 @@ body {
 }
 
 /* --- Story Overlay --- */
+
+.story-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(58, 48, 38, 0.12);
+  z-index: 175;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.story-panel-backdrop.hidden {
+  display: none;
+}
+
+.story-panel-backdrop.open {
+  opacity: 1;
+}
+
+.story-panel {
+  position: fixed;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  padding: 0.9rem 1rem 0.7rem;
+  z-index: 180;
+  background: rgba(250, 246, 240, 0.98);
+  border: 1px solid rgba(226, 217, 206, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(61, 50, 41, 0.06);
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 170ms ease, transform 170ms ease;
+}
+
+.story-panel.hidden {
+  display: none;
+}
+
+.story-panel.open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.story-panel-section + .story-panel-section {
+  margin-top: 0.75rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(226, 217, 206, 0.9);
+}
+
+.story-panel-intent label {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.story-panel-intent textarea {
+  width: 100%;
+  min-height: 8.5rem;
+  max-height: 34vh;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 0.94rem;
+  line-height: 1.7;
+  padding: 0.65rem 0.75rem;
+  outline: none;
+}
+
+.story-panel-intent textarea:focus {
+  border-color: var(--accent);
+}
+
+.story-panel-chapters.hidden {
+  display: none;
+}
+
+.story-panel-chapter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.story-panel-chapter-item {
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--serif);
+  font-size: 0.93rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  padding: 0.34rem 0.12rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.story-panel-chapter-item:hover {
+  color: var(--text);
+  background: rgba(245, 239, 230, 0.8);
+}
+
+.story-panel-manage-link {
+  border: none;
+  background: none;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  padding: 0.1rem 0;
+  cursor: pointer;
+}
+
+.story-panel-manage-link:hover {
+  color: var(--text-muted);
+}
 
 .story-overlay {
   position: fixed;
