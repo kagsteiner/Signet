@@ -381,8 +381,8 @@
 
   function showRewriteOverlay(rect) {
     rewriteOverlay.classList.remove('hidden');
-    rewriteOverlay.style.left = `${rect.left + window.scrollX}px`;
-    rewriteOverlay.style.top = `${rect.bottom + window.scrollY + 8}px`;
+    rewriteOverlay.style.left = `${rect.left}px`;
+    rewriteOverlay.style.top = `${rect.bottom + 8}px`;
     rewritePreview.classList.add('hidden');
     rewriteInput.value = '';
   }
