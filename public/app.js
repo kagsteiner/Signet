@@ -481,15 +481,11 @@
     selectedTextForRewrite = selectedRaw;
     selectedRangeForRewrite = offsets;
 
-    const sel = window.getSelection();
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    showRewriteOverlay(rect);
+    showRewriteOverlay();
   }
 
-  function showRewriteOverlay(rect) {
+  function showRewriteOverlay() {
     rewriteOverlay.classList.remove('hidden');
-    rewriteOverlay.style.left = `${rect.left}px`;
-    rewriteOverlay.style.top = `${rect.bottom + 8}px`;
     rewritePreview.classList.add('hidden');
     rewriteInput.value = '';
   }
