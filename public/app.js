@@ -316,18 +316,59 @@
   }
 
   function insertContinuation(sentence) {
-    const p = document.createElement('p');
-    p.textContent = sentence;
-    editor.appendChild(p);
-
-    const range = document.createRange();
-    range.selectNodeContents(p);
-    range.collapse(false);
     const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    if (!sel || sel.rangeCount === 0) return;
 
-    editor.scrollTop = editor.scrollHeight;
+    // Find the block element (p or h2) containing the cursor
+    let node = sel.anchorNode;
+    let block = null;
+    while (node && node !== editor) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = node.tagName.toLowerCase();
+        if (tag === 'p' || tag === 'h2') {
+          block = node;
+          break;
+        }
+      }
+      node = node.parentNode;
+    }
+
+    if (!block) {
+      // Fallback: append new paragraph (e.g. empty editor)
+      const p = document.createElement('p');
+      p.textContent = sentence;
+      editor.appendChild(p);
+      const range = document.createRange();
+      range.selectNodeContents(p);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      editor.scrollTop = editor.scrollHeight;
+      scheduleSave();
+      return;
+    }
+
+    const fullText = block.textContent || '';
+    const lastPeriod = fullText.lastIndexOf('.');
+
+    // Insert ". " + sentence after last period, or ". " + sentence at end if none
+    const insertPos = lastPeriod >= 0 ? lastPeriod + 1 : fullText.length;
+    const prefix = lastPeriod >= 0 ? ' ' : '. ';
+    const newText = fullText.slice(0, insertPos) + prefix + sentence + fullText.slice(insertPos);
+
+    block.textContent = newText;
+
+    const endOfInsert = insertPos + prefix.length + sentence.length;
+    const textNode = block.firstChild;
+    if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+      const range = document.createRange();
+      range.setStart(textNode, Math.min(endOfInsert, textNode.length));
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+
+    block.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     scheduleSave();
   }
 
