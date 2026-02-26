@@ -4,10 +4,12 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const db = require('./db');
+const chapters = require('./public/chapters');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const chapterIndexCache = new Map();
 
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
@@ -74,26 +76,49 @@ app.get('/api/stories', requireAuth, (req, res) => {
 
 app.post('/api/stories', requireAuth, (req, res) => {
   const title = req.body.title || 'Untitled';
-  const story = db.createStory(req.userId, title);
-  res.json({ story });
+  const existingStories = db.getUserStories(req.userId);
+  const isFirstStory = existingStories.length === 0;
+  const story = db.createStory(req.userId, title, {
+    initialContent: isFirstStory ? db.FIRST_STORY_STARTER_MANUSCRIPT : '',
+  });
+  res.json({ story: buildStoryResponse(story) });
 });
 
 app.get('/api/stories/:id', requireAuth, (req, res) => {
   const story = db.getStory(req.params.id, req.userId);
   if (!story) return res.status(404).json({ error: 'Story not found' });
-  res.json({ story });
+  res.json({ story: buildStoryResponse(story) });
 });
 
 app.put('/api/stories/:id', requireAuth, (req, res) => {
   const story = db.updateStory(req.params.id, req.userId, req.body);
   if (!story) return res.status(404).json({ error: 'Story not found' });
-  res.json({ story });
+  chapterIndexCache.delete(story.id);
+  res.json({ story: buildStoryResponse(story) });
 });
 
 app.delete('/api/stories/:id', requireAuth, (req, res) => {
   const result = db.deleteStory(req.params.id, req.userId);
   if (result.changes === 0) return res.status(404).json({ error: 'Story not found' });
+  chapterIndexCache.delete(req.params.id);
   res.json({ ok: true });
+});
+
+app.get('/api/stories/:id/chapter-context', requireAuth, (req, res) => {
+  const story = db.getStory(req.params.id, req.userId);
+  if (!story) return res.status(404).json({ error: 'Story not found' });
+  const parsedOffset = Number(req.query.offset);
+  if (!Number.isFinite(parsedOffset)) {
+    return res.status(400).json({ error: 'offset query parameter is required' });
+  }
+
+  const chapterData = getCachedChapterData(story);
+  const context = chapters.getChapterContext(chapterData.chapters, parsedOffset);
+  res.json({
+    current: context.current,
+    before: context.before,
+    after: context.after,
+  });
 });
 
 // --- AI Continuation (The Gem) ---
@@ -215,6 +240,29 @@ function renderErrorPage(message) {
 </head>
 <body><div class="msg">${message}</div></body>
 </html>`;
+}
+
+function getCachedChapterData(story) {
+  const cached = chapterIndexCache.get(story.id);
+  if (cached && cached.lastModified === story.last_modified && cached.content === story.content_markdown) {
+    return cached;
+  }
+
+  const parsed = {
+    content: story.content_markdown || '',
+    chapters: chapters.parseChapters(story.content_markdown || ''),
+    lastModified: story.last_modified,
+  };
+  chapterIndexCache.set(story.id, parsed);
+  return parsed;
+}
+
+function buildStoryResponse(story) {
+  const chapterData = getCachedChapterData(story);
+  return {
+    ...story,
+    chapters: chapterData.chapters,
+  };
 }
 
 // Periodic cleanup

@@ -69,6 +69,31 @@ function now() {
   return Date.now();
 }
 
+const FIRST_STORY_STARTER_MANUSCRIPT = `Welcome to Storytellers
+
+This is your manuscript space.
+A quiet page with wide margins.
+The text is sacred.
+
+When you’re writing and you get stuck, look for the Gem at the end of a paragraph.
+Click it to receive exactly one continuation sentence.
+Undo if it’s not yours.
+
+---
+Chapters and intent
+
+Chapters are separated by simple divider lines.
+You can use:
+*
+---
+-*-
+
+The line right after a divider becomes the chapter title (like this one).
+
+At the top, you can keep a Story Intent and a Chapter Intent.
+They’re there to help the Gem stay in the right voice — quietly, without noise.
+`;
+
 // --- User operations ---
 
 function createUser(name) {
@@ -124,12 +149,13 @@ function cleanExpiredSessions() {
 
 // --- Story operations ---
 
-function createStory(userId, title = 'Untitled') {
+function createStory(userId, title = 'Untitled', options = {}) {
   const d = getDb();
   const id = generateId();
   const timestamp = now();
-  d.prepare('INSERT INTO stories (id, user_id, title, content_markdown, story_intent, chapter_intent, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, '', null, null, timestamp, timestamp);
-  return { id, user_id: userId, title, content_markdown: '', story_intent: null, chapter_intent: null, last_modified: timestamp, created_at: timestamp };
+  const initialContent = options.initialContent !== undefined ? options.initialContent : '';
+  d.prepare('INSERT INTO stories (id, user_id, title, content_markdown, story_intent, chapter_intent, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, initialContent, null, null, timestamp, timestamp);
+  return { id, user_id: userId, title, content_markdown: initialContent, story_intent: null, chapter_intent: null, last_modified: timestamp, created_at: timestamp };
 }
 
 function getUserStories(userId) {
@@ -181,4 +207,5 @@ module.exports = {
   updateStory,
   deleteStory,
   SESSION_DURATION_MS,
+  FIRST_STORY_STARTER_MANUSCRIPT,
 };

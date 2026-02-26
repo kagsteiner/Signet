@@ -1,8 +1,12 @@
 (function () {
   'use strict';
 
+  const Chapters = window.StorytellersChapters || {};
+
   // --- State ---
   let currentStory = null;
+  let currentChapters = [];
+  let currentChapterContext = { current: null, before: [], after: [] };
   let stories = [];
   let saveTimer = null;
   let intentSaveTimer = null;
@@ -72,54 +76,160 @@
     titleBtn.textContent = currentStory.title;
     document.title = `${currentStory.title} — Storytellers`;
     storyIntentEl.value = currentStory.story_intent || '';
-    setEditorContent(currentStory.content_markdown);
+    setEditorContent(currentStory.content_markdown || '');
     updateGemVisibility();
   }
 
-  // --- Markdown ↔ Editor ---
-  function setEditorContent(markdown) {
-    if (!markdown) {
-      editor.innerHTML = '';
-      return;
-    }
-    const html = markdownToHtml(markdown);
-    editor.innerHTML = html;
+  // --- Editor text + chapter rendering ---
+  function setEditorContent(text) {
+    renderEditorText(text || '', {});
   }
 
-  function getEditorMarkdown() {
-    const nodes = editor.childNodes;
-    const lines = [];
-    for (const node of nodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent;
-        if (text.trim()) lines.push(text);
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const tag = node.tagName.toLowerCase();
-        if (tag === 'h2') {
-          lines.push(`## ${node.textContent}`);
-        } else if (tag === 'br') {
-          lines.push('');
-        } else {
-          lines.push(node.textContent);
-        }
-      }
-    }
-    return lines.join('\n');
+  function getLineElements() {
+    return Array.from(editor.querySelectorAll('.editor-line'));
   }
 
-  function markdownToHtml(md) {
-    const lines = md.split('\n');
-    let html = '';
+  function getLineRawText(line) {
+    if (!line) return '';
+    return line.textContent || '';
+  }
+
+  function getEditorText() {
+    const lines = getLineElements();
+    if (lines.length === 0) return editor.textContent || '';
+    return lines.map((line) => getLineRawText(line)).join('\n');
+  }
+
+  function ornamentForDivider(style) {
+    if (style === '*') return '✶';
+    if (style === '-*-') return '— ✶ —';
+    return '— • —';
+  }
+
+  function renderEditorText(text, opts = {}) {
+    const parsedText = typeof text === 'string' ? text : '';
+    const lines = Chapters.splitLinesWithOffsets
+      ? Chapters.splitLinesWithOffsets(parsedText)
+      : [{ text: parsedText, trimmed: parsedText.trim(), startOffset: 0, endOffset: parsedText.length, fullEndOffset: parsedText.length }];
+
+    currentChapters = Chapters.parseChapters ? Chapters.parseChapters(parsedText) : [];
+    const titleStarts = new Set(
+      currentChapters
+        .filter((chapter) => chapter.title)
+        .map((chapter) => chapter.title.startOffset)
+    );
+
+    const fragment = document.createDocumentFragment();
+    let previousWasDivider = false;
     for (const line of lines) {
-      if (line.startsWith('## ')) {
-        html += `<h2>${escapeHtml(line.slice(3))}</h2>`;
-      } else if (line.trim() === '') {
-        html += '<p><br></p>';
+      const lineEl = document.createElement('div');
+      lineEl.className = 'editor-line';
+
+      if (line.text === '') {
+        lineEl.appendChild(document.createElement('br'));
       } else {
-        html += `<p>${escapeHtml(line)}</p>`;
+        lineEl.textContent = line.text;
       }
+
+      if (Chapters.isDividerLine && Chapters.isDividerLine(line.text)) {
+        const style = line.trimmed;
+        lineEl.classList.add('chapter-divider');
+        lineEl.dataset.dividerStyle = style;
+        lineEl.dataset.ornament = ornamentForDivider(style);
+        if (previousWasDivider) lineEl.classList.add('chapter-divider-coalesced');
+        previousWasDivider = true;
+      } else {
+        previousWasDivider = false;
+      }
+
+      if (titleStarts.has(line.startOffset)) {
+        lineEl.classList.add('chapter-title');
+      }
+
+      fragment.appendChild(lineEl);
     }
-    return html;
+
+    editor.replaceChildren(fragment);
+
+    if (typeof opts.cursorOffset === 'number') {
+      setCursorOffset(opts.cursorOffset);
+    }
+
+    refreshChapterContextAtCursor();
+  }
+
+  function computeOffsetFromPosition(container, containerOffset) {
+    const lines = getLineElements();
+    if (lines.length === 0) return 0;
+    const line = container.nodeType === Node.ELEMENT_NODE && container.classList && container.classList.contains('editor-line')
+      ? container
+      : container.parentElement ? container.parentElement.closest('.editor-line') : null;
+    if (!line || !editor.contains(line)) return getEditorText().length;
+
+    const lineIndex = lines.indexOf(line);
+    if (lineIndex < 0) return 0;
+
+    let offset = 0;
+    for (let i = 0; i < lineIndex; i += 1) {
+      offset += getLineRawText(lines[i]).length;
+      offset += 1; // newline between rendered lines
+    }
+
+    const intraRange = document.createRange();
+    intraRange.selectNodeContents(line);
+    intraRange.setEnd(container, containerOffset);
+    const intraOffset = intraRange.toString().length;
+    offset += Math.min(intraOffset, getLineRawText(line).length);
+    return Math.max(0, Math.min(offset, getEditorText().length));
+  }
+
+  function getCursorOffset() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0);
+    return computeOffsetFromPosition(range.startContainer, range.startOffset);
+  }
+
+  function getSelectionOffsets() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+    const start = computeOffsetFromPosition(range.startContainer, range.startOffset);
+    const end = computeOffsetFromPosition(range.endContainer, range.endOffset);
+    return {
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+    };
+  }
+
+  function setCursorOffset(offset) {
+    const lines = getLineElements();
+    if (lines.length === 0) return;
+
+    const totalLength = getEditorText().length;
+    let remaining = Math.max(0, Math.min(offset, totalLength));
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const lineText = getLineRawText(line);
+      if (remaining <= lineText.length || i === lines.length - 1) {
+        if (line.firstChild && line.firstChild.nodeType === Node.TEXT_NODE) {
+          range.setStart(line.firstChild, Math.min(remaining, lineText.length));
+        } else {
+          range.setStart(line, 0);
+        }
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return;
+      }
+      remaining -= lineText.length;
+      if (remaining > 0) remaining -= 1;
+    }
   }
 
   function escapeHtml(str) {
@@ -139,11 +249,11 @@
     if (!currentStory || isSaving) return;
     isSaving = true;
     saveIndicator.textContent = 'Saving…';
-    const markdown = getEditorMarkdown();
+    const text = getEditorText();
     try {
       const result = await api(`/api/stories/${currentStory.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ content_markdown: markdown }),
+        body: JSON.stringify({ content_markdown: text }),
       });
       if (result) {
         currentStory = result.story;
@@ -257,21 +367,17 @@
   }
 
   function getTextUpToCursor() {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return '';
-    try {
-      const range = sel.getRangeAt(0);
-      const preRange = document.createRange();
-      preRange.setStart(editor, 0);
-      preRange.setEnd(range.startContainer, range.startOffset);
-      return preRange.toString();
-    } catch {
-      return editor.textContent || '';
-    }
+    const full = getEditorText();
+    return full.slice(0, getCursorOffset());
   }
 
   function getFullEditorText() {
-    return editor.textContent || '';
+    return getEditorText();
+  }
+
+  function refreshChapterContextAtCursor() {
+    if (!Chapters.getChapterContext) return;
+    currentChapterContext = Chapters.getChapterContext(currentChapters, getCursorOffset());
   }
 
   // --- The Gem: continuation ---
@@ -312,59 +418,20 @@
   }
 
   function insertContinuation(sentence) {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
+    const text = getEditorText();
+    const cursorOffset = getCursorOffset();
+    const lineStart = text.lastIndexOf('\n', Math.max(0, cursorOffset - 1)) + 1;
+    const lineEndRaw = text.indexOf('\n', cursorOffset);
+    const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw;
+    const lineText = text.slice(lineStart, lineEnd);
+    const lastPeriod = lineText.lastIndexOf('.');
 
-    // Find the block element (p or h2) containing the cursor
-    let node = sel.anchorNode;
-    let block = null;
-    while (node && node !== editor) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const tag = node.tagName.toLowerCase();
-        if (tag === 'p' || tag === 'h2') {
-          block = node;
-          break;
-        }
-      }
-      node = node.parentNode;
-    }
-
-    if (!block) {
-      // Fallback: append new paragraph (e.g. empty editor)
-      const p = document.createElement('p');
-      p.textContent = sentence;
-      editor.appendChild(p);
-      const range = document.createRange();
-      range.selectNodeContents(p);
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      editor.scrollTop = editor.scrollHeight;
-      scheduleSave();
-      return;
-    }
-
-    const fullText = block.textContent || '';
-    const lastPeriod = fullText.lastIndexOf('.');
-
-    // Insert ". " + sentence after last period, or ". " + sentence at end if none
-    const insertPos = lastPeriod >= 0 ? lastPeriod + 1 : fullText.length;
+    const insertPos = lastPeriod >= 0 ? lineStart + lastPeriod + 1 : lineEnd;
     const prefix = lastPeriod >= 0 ? ' ' : '. ';
-    const newText = fullText.slice(0, insertPos) + prefix + sentence + fullText.slice(insertPos);
+    const updatedText = text.slice(0, insertPos) + prefix + sentence + text.slice(insertPos);
+    const newCursor = insertPos + prefix.length + sentence.length;
 
-    block.textContent = newText;
-
-    const endOfInsert = insertPos + prefix.length + sentence.length;
-    const textNode = block.firstChild;
-    if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-      const range = document.createRange();
-      range.setStart(textNode, Math.min(endOfInsert, textNode.length));
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
-
-    block.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    renderEditorText(updatedText, { cursorOffset: newCursor });
     scheduleSave();
   }
 
@@ -391,27 +458,30 @@
 
   // --- Rewrite selection ---
   let selectedTextForRewrite = '';
-  let selectedRangeForRewrite = null;
+  let selectedRangeForRewrite = null; // { start, end } offsets in UTF-16 code units
 
   function handleSelectionChange() {
     if (rewriteOverlay.contains(document.activeElement)) return;
 
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) {
+    const offsets = getSelectionOffsets();
+    if (!offsets || offsets.start === offsets.end) {
       if (!rewriteOverlay.classList.contains('hidden')) return;
       updateGemVisibility();
+      refreshChapterContextAtCursor();
       return;
     }
 
-    const text = sel.toString().trim();
-    if (text.length < 3) {
+    const fullText = getEditorText();
+    const selectedRaw = fullText.slice(offsets.start, offsets.end);
+    if (selectedRaw.trim().length < 3) {
       hideRewriteOverlay();
       return;
     }
 
-    selectedTextForRewrite = text;
-    selectedRangeForRewrite = sel.getRangeAt(0).cloneRange();
+    selectedTextForRewrite = selectedRaw;
+    selectedRangeForRewrite = offsets;
 
+    const sel = window.getSelection();
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     showRewriteOverlay(rect);
   }
@@ -466,11 +536,12 @@
     const rewritten = rewritePreview.dataset.rewritten;
     if (!rewritten || !selectedRangeForRewrite) return;
 
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(selectedRangeForRewrite);
-    document.execCommand('insertText', false, rewritten);
+    const fullText = getEditorText();
+    const { start, end } = selectedRangeForRewrite;
+    const updatedText = fullText.slice(0, start) + rewritten + fullText.slice(end);
+    const newCursor = start + rewritten.length;
 
+    renderEditorText(updatedText, { cursorOffset: newCursor });
     hideRewriteOverlay();
     scheduleSave();
   }
@@ -482,8 +553,8 @@
   // --- Export ---
   function exportAsMarkdown() {
     if (!currentStory) return;
-    const markdown = getEditorMarkdown();
-    downloadFile(`${currentStory.title}.md`, markdown, 'text/markdown');
+    const manuscript = getEditorText();
+    downloadFile(`${currentStory.title}.md`, manuscript, 'text/markdown');
     hideStoryOverlay();
   }
 
@@ -523,12 +594,21 @@
   // --- Event listeners ---
 
   editor.addEventListener('input', () => {
+    const cursorOffset = getCursorOffset();
+    const text = getEditorText();
+    renderEditorText(text, { cursorOffset });
     scheduleSave();
     updateGemVisibility();
   });
 
-  editor.addEventListener('keyup', () => updateGemVisibility());
-  editor.addEventListener('click', () => updateGemVisibility());
+  editor.addEventListener('keyup', () => {
+    updateGemVisibility();
+    refreshChapterContextAtCursor();
+  });
+  editor.addEventListener('click', () => {
+    updateGemVisibility();
+    refreshChapterContextAtCursor();
+  });
 
   gem.addEventListener('click', (e) => {
     e.preventDefault();
