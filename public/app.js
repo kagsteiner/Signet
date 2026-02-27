@@ -13,6 +13,13 @@
   let isSaving = false;
   let gemHintShown = localStorage.getItem('gemHintShown') === '1';
   let storyPanelHideTimer = null;
+  const HISTORY_LIMIT = 100;
+  let undoStack = [];
+  let redoStack = [];
+  let pendingBeforeInputSnapshot = null;
+  let isApplyingHistory = false;
+  let lastKnownEditorText = '';
+  const isMacPlatform = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
 
   // --- DOM refs ---
   const titleBtn = document.getElementById('story-title-btn');
@@ -79,7 +86,9 @@
     titleBtn.textContent = currentStory.title;
     document.title = `${currentStory.title} — Storytellers`;
     storyIntentEl.value = currentStory.story_intent || '';
-    setEditorContent(currentStory.content_markdown || '');
+    const storyText = currentStory.content_markdown || '';
+    setEditorContent(storyText);
+    resetHistoryForText(storyText);
     updateGemVisibility();
   }
 
@@ -234,6 +243,140 @@
       remaining -= lineText.length;
       if (remaining > 0) remaining -= 1;
     }
+  }
+
+  function getSelectionSnapshot() {
+    const offsets = getSelectionOffsets();
+    if (offsets) return { start: offsets.start, end: offsets.end };
+    const cursor = getCursorOffset();
+    return { start: cursor, end: cursor };
+  }
+
+  function resolvePositionForOffset(offset) {
+    const lines = getLineElements();
+    if (lines.length === 0) return null;
+
+    const totalLength = getEditorText().length;
+    let remaining = Math.max(0, Math.min(offset, totalLength));
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const lineText = getLineRawText(line);
+      if (remaining <= lineText.length || i === lines.length - 1) {
+        if (line.firstChild && line.firstChild.nodeType === Node.TEXT_NODE) {
+          return {
+            container: line.firstChild,
+            offset: Math.min(remaining, lineText.length),
+          };
+        }
+        return { container: line, offset: 0 };
+      }
+      remaining -= lineText.length;
+      if (remaining > 0) remaining -= 1;
+    }
+
+    return null;
+  }
+
+  function setSelectionOffsets(start, end) {
+    const startPos = resolvePositionForOffset(start);
+    const endPos = resolvePositionForOffset(end);
+    if (!startPos || !endPos) return;
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(startPos.container, startPos.offset);
+    range.setEnd(endPos.container, endPos.offset);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function makeSnapshot(text, selection) {
+    return {
+      text: typeof text === 'string' ? text : '',
+      selectionStart: selection.start,
+      selectionEnd: selection.end,
+    };
+  }
+
+  function captureCurrentSnapshot(textOverride) {
+    const text = typeof textOverride === 'string' ? textOverride : getEditorText();
+    return makeSnapshot(text, getSelectionSnapshot());
+  }
+
+  function pushSnapshot(stack, snapshot) {
+    if (!snapshot) return;
+    const previous = stack[stack.length - 1];
+    if (
+      previous &&
+      previous.text === snapshot.text &&
+      previous.selectionStart === snapshot.selectionStart &&
+      previous.selectionEnd === snapshot.selectionEnd
+    ) {
+      return;
+    }
+    stack.push(snapshot);
+    if (stack.length > HISTORY_LIMIT) stack.shift();
+  }
+
+  function resetHistoryForText(text) {
+    undoStack = [];
+    redoStack = [];
+    pendingBeforeInputSnapshot = null;
+    lastKnownEditorText = typeof text === 'string' ? text : '';
+  }
+
+  function isSelectionInsideEditor() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    return editor.contains(range.startContainer) && editor.contains(range.endContainer);
+  }
+
+  function shouldHandleEditorUndoRedo(e) {
+    const target = e.target;
+    if (
+      target &&
+      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) &&
+      !editor.contains(target) &&
+      target !== editor
+    ) {
+      return false;
+    }
+    return isSelectionInsideEditor() || target === editor || editor.contains(target);
+  }
+
+  function applyHistorySnapshot(snapshot) {
+    if (!snapshot) return;
+    isApplyingHistory = true;
+    try {
+      renderEditorText(snapshot.text, { cursorOffset: snapshot.selectionEnd });
+      setSelectionOffsets(snapshot.selectionStart, snapshot.selectionEnd);
+      lastKnownEditorText = snapshot.text;
+    } finally {
+      isApplyingHistory = false;
+    }
+    scheduleSave();
+    updateGemVisibility();
+  }
+
+  function undoEdit() {
+    if (undoStack.length === 0) return;
+    pushSnapshot(redoStack, captureCurrentSnapshot());
+    const snapshot = undoStack.pop();
+    applyHistorySnapshot(snapshot);
+  }
+
+  function redoEdit() {
+    if (redoStack.length === 0) return;
+    pushSnapshot(undoStack, captureCurrentSnapshot());
+    const snapshot = redoStack.pop();
+    applyHistorySnapshot(snapshot);
+  }
+
+  function recordBeforeProgrammaticTextChange() {
+    pushSnapshot(undoStack, captureCurrentSnapshot(lastKnownEditorText));
+    redoStack = [];
   }
 
   function escapeHtml(str) {
@@ -546,6 +689,7 @@
   }
 
   function insertContinuation(sentence) {
+    recordBeforeProgrammaticTextChange();
     const text = getEditorText();
     const cursorOffset = getCursorOffset();
     const lineStart = text.lastIndexOf('\n', Math.max(0, cursorOffset - 1)) + 1;
@@ -560,6 +704,7 @@
     const newCursor = insertPos + prefix.length + sentence.length;
 
     renderEditorText(updatedText, { cursorOffset: newCursor });
+    lastKnownEditorText = updatedText;
     scheduleSave();
   }
 
@@ -576,6 +721,21 @@
 
   // --- Keyboard shortcut ---
   function handleKeydown(e) {
+    if (shouldHandleEditorUndoRedo(e)) {
+      const key = (e.key || '').toLowerCase();
+      const modifierPressed = isMacPlatform ? e.metaKey : e.ctrlKey;
+      if (modifierPressed && !e.altKey && !e.shiftKey && key === 'z') {
+        e.preventDefault();
+        undoEdit();
+        return;
+      }
+      if (modifierPressed && !e.altKey && ((e.shiftKey && key === 'z') || (!e.shiftKey && key === 'y'))) {
+        e.preventDefault();
+        redoEdit();
+        return;
+      }
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault();
       gem.classList.add('active');
@@ -660,12 +820,14 @@
     const rewritten = rewritePreview.dataset.rewritten;
     if (!rewritten || !selectedRangeForRewrite) return;
 
+    recordBeforeProgrammaticTextChange();
     const fullText = getEditorText();
     const { start, end } = selectedRangeForRewrite;
     const updatedText = fullText.slice(0, start) + rewritten + fullText.slice(end);
     const newCursor = start + rewritten.length;
 
     renderEditorText(updatedText, { cursorOffset: newCursor });
+    lastKnownEditorText = updatedText;
     hideRewriteOverlay();
     scheduleSave();
   }
@@ -712,10 +874,21 @@
 
   // --- Event listeners ---
 
+  editor.addEventListener('beforeinput', () => {
+    if (isApplyingHistory) return;
+    pendingBeforeInputSnapshot = captureCurrentSnapshot(lastKnownEditorText);
+  });
+
   editor.addEventListener('input', () => {
     const cursorOffset = getCursorOffset();
     const text = getEditorText();
+    if (!isApplyingHistory && pendingBeforeInputSnapshot && pendingBeforeInputSnapshot.text !== text) {
+      pushSnapshot(undoStack, pendingBeforeInputSnapshot);
+      redoStack = [];
+    }
     renderEditorText(text, { cursorOffset });
+    lastKnownEditorText = text;
+    pendingBeforeInputSnapshot = null;
     scheduleSave();
     updateGemVisibility();
   });
