@@ -1,8 +1,8 @@
-# 📜 Storytellers V2 — Complete System Specification
+# 📜 Signet — Complete System Specification
 
 ## 0. Core Identity
 
-Storytellers is a private, invitation-only, multi-device writing studio.
+Signet is a private, invitation-only, multi-device writing studio.
 
 It is:
 - Minimal

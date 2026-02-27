@@ -69,7 +69,7 @@ function now() {
   return Date.now();
 }
 
-const FIRST_STORY_STARTER_MANUSCRIPT = `Welcome to Storytellers
+const FIRST_STORY_STARTER_MANUSCRIPT = `Welcome to Signet
 
 This is your manuscript space.
 A quiet page with wide margins.
@@ -90,8 +90,8 @@ You can use:
 
 The line right after a divider becomes the chapter title (like this one).
 
-At the top, you can keep a Story Intent and a Chapter Intent.
-They’re there to help the Gem stay in the right voice — quietly, without noise.
+At the top, open the story panel to keep a Story Intent.
+It's there to help the Gem stay in the right voice — quietly, without noise.
 `;
 
 // --- User operations ---

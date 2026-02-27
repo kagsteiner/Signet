@@ -3,7 +3,7 @@
     module.exports = factory();
     return;
   }
-  root.StorytellersChapters = factory();
+  root.SignetChapters = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 

@@ -11,10 +11,12 @@ const PORT = process.env.PORT || 3005;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const chapterIndexCache = new Map();
 
-// Base path when behind a subpath (e.g. nginx at /signet/). From env or X-Script-Name header.
+// Base path when behind a subpath (e.g. nginx at /signet/). From env, rewrite middleware, or X-Script-Name header.
 function getBasePath(req) {
   const fromEnv = (process.env.BASE_PATH || '').replace(/\/$/, '');
   if (fromEnv) return fromEnv.startsWith('/') ? fromEnv : `/${fromEnv}`;
+  const fromRewrite = (req && req.basePathPrefix) || '';
+  if (fromRewrite) return fromRewrite;
   const fromHeader = (req && req.get('X-Script-Name')) || '';
   return fromHeader.replace(/\/$/, '');
 }
@@ -26,6 +28,29 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+
+// Allow local direct access via subpath (e.g. http://localhost:3005/signet/app) without nginx path stripping.
+const localPrefixAliases = (process.env.LOCAL_PATH_ALIASES || '/signet')
+  .split(',')
+  .map((v) => v.trim())
+  .filter(Boolean)
+  .map((v) => (v.startsWith('/') ? v : `/${v}`))
+  .map((v) => v.replace(/\/$/, ''));
+
+app.use((req, _res, next) => {
+  const envBase = (process.env.BASE_PATH || '').trim().replace(/\/$/, '');
+  const prefixes = envBase ? [envBase, ...localPrefixAliases] : localPrefixAliases;
+  for (const prefix of prefixes) {
+    if (!prefix || prefix === '/') continue;
+    if (req.url === prefix || req.url.startsWith(`${prefix}/`)) {
+      req.basePathPrefix = prefix;
+      req.url = req.url.slice(prefix.length) || '/';
+      break;
+    }
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- Rate limiting for access key endpoint ---
@@ -174,7 +199,7 @@ app.get('/', (req, res) => {
   if (sessionId && db.findValidSession(sessionId)) {
     return res.redirect(`${getBasePath(req)}/app`);
   }
-  res.send(renderErrorPage('Storytellers is invitation-only. Please use your personal access link.'));
+  res.send(renderErrorPage('Signet is invitation-only. Please use your personal access link.'));
 });
 
 // --- AI helpers ---
@@ -335,7 +360,7 @@ function renderErrorPage(message) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Storytellers</title>
+  <title>Signet</title>
   <style>
     body {
       font-family: 'Iowan Old Style', 'Palatino Linotype', 'Palatino', Georgia, serif;
@@ -386,5 +411,5 @@ function buildStoryResponse(story) {
 setInterval(() => db.cleanExpiredSessions(), 60 * 60 * 1000);
 
 app.listen(PORT, () => {
-  console.log(`Storytellers 2 running on port ${PORT}`);
+  console.log(`Signet running on port ${PORT}`);
 });

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const Chapters = window.StorytellersChapters || {};
+  const Chapters = window.SignetChapters || {};
   const APP_BASE_PATH = window.location.pathname.replace(/\/app\/?$/, '');
 
   // --- State ---
@@ -87,7 +87,7 @@
 
   function renderStory() {
     titleBtn.textContent = currentStory.title;
-    document.title = `${currentStory.title} — Storytellers`;
+    document.title = `${currentStory.title} — Signet`;
     storyIntentEl.value = currentStory.story_intent || '';
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
@@ -446,7 +446,7 @@
         if (result) {
           currentStory = result.story;
           titleBtn.textContent = currentStory.title;
-          document.title = `${currentStory.title} — Storytellers`;
+          document.title = `${currentStory.title} — Signet`;
         }
       });
     }

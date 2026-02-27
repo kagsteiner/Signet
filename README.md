@@ -1,4 +1,4 @@
-# Storytellers V2
+# Signet
 
 A private, invitation-only writing studio. Minimal, literary, calm.
 

@@ -5,7 +5,7 @@ const command = args[0];
 
 function usage() {
   console.log(`
-Storytellers Admin CLI
+Signet Admin CLI
 
 Usage:
   node admin.js create-user <name>       Create a new user and print their access URL
