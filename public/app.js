@@ -21,6 +21,7 @@
   let isApplyingHistory = false;
   let lastKnownEditorText = '';
   const isMacPlatform = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
+  const CURSOR_BOTTOM_PADDING_LINES = 3;
 
   // --- DOM refs ---
   const titleBtn = document.getElementById('story-title-btn');
@@ -292,6 +293,33 @@
     range.setEnd(endPos.container, endPos.offset);
     selection.removeAllRanges();
     selection.addRange(range);
+  }
+
+  function getEditorLineHeightPx() {
+    const style = window.getComputedStyle(editor);
+    const parsedLineHeight = parseFloat(style.lineHeight);
+    if (Number.isFinite(parsedLineHeight)) return parsedLineHeight;
+    const parsedFontSize = parseFloat(style.fontSize);
+    if (Number.isFinite(parsedFontSize)) return parsedFontSize * 1.85;
+    return 32;
+  }
+
+  function ensureCursorBottomPadding() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer)) return;
+
+    const rect = range.getBoundingClientRect();
+    if (!rect || rect.height === 0) return;
+
+    const lineHeight = getEditorLineHeightPx();
+    const minimumBottomSpace = lineHeight * CURSOR_BOTTOM_PADDING_LINES;
+    const threshold = window.innerHeight - minimumBottomSpace;
+    if (rect.bottom <= threshold) return;
+
+    const delta = rect.bottom - threshold;
+    window.scrollBy({ top: delta, left: 0, behavior: 'auto' });
   }
 
   function makeSnapshot(text, selection) {
@@ -969,15 +997,18 @@
     pendingBeforeInputSnapshot = null;
     scheduleSave();
     updateGemVisibility();
+    ensureCursorBottomPadding();
   });
 
   editor.addEventListener('keyup', () => {
     updateGemVisibility();
     refreshChapterContextAtCursor();
+    ensureCursorBottomPadding();
   });
   editor.addEventListener('click', () => {
     updateGemVisibility();
     refreshChapterContextAtCursor();
+    ensureCursorBottomPadding();
   });
 
   gem.addEventListener('click', (e) => {
