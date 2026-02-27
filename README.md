@@ -14,7 +14,8 @@ Set environment variables before starting:
 
 | Variable | Required | Description |
 |---|---|---|
-| `PORT` | No | Server port (default: 3000) |
+| `PORT` | No | Server port (default: 3005) |
+| `BASE_PATH` | No | When behind a subpath (e.g. nginx at `/signet/`), set to `BASE_PATH=/signet` so redirects and cookies work |
 | `OPENAI_API_KEY` | Yes (for AI) | OpenAI API key for Gem continuation and rewrite |
 | `NODE_ENV` | No | Set to `production` for secure cookies |
 

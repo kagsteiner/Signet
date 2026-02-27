@@ -38,6 +38,7 @@
   const exportMdBtn = document.getElementById('export-md-btn');
   const exportTxtBtn = document.getElementById('export-txt-btn');
   const rewriteOverlay = document.getElementById('rewrite-overlay');
+  const rewriteSelected = document.getElementById('rewrite-selected');
   const rewriteInput = document.getElementById('rewrite-input');
   const rewritePreview = document.getElementById('rewrite-preview');
   const rewriteDiff = document.getElementById('rewrite-diff');
@@ -775,12 +776,14 @@
   function showRewriteOverlay() {
     rewriteOverlay.classList.remove('hidden');
     rewritePreview.classList.add('hidden');
+    rewriteSelected.textContent = selectedTextForRewrite;
     rewriteInput.value = '';
   }
 
   function hideRewriteOverlay() {
     rewriteOverlay.classList.add('hidden');
     rewritePreview.classList.add('hidden');
+    rewriteSelected.textContent = '';
     rewriteInput.value = '';
     selectedTextForRewrite = '';
     selectedRangeForRewrite = null;
@@ -788,7 +791,7 @@
 
   async function submitRewrite() {
     const instruction = rewriteInput.value.trim();
-    if (!instruction || !selectedTextForRewrite) return;
+    if (!instruction || !selectedTextForRewrite || !selectedRangeForRewrite) return;
 
     rewriteInput.disabled = true;
     try {
@@ -797,7 +800,9 @@
         body: JSON.stringify({
           selectedText: selectedTextForRewrite,
           instruction,
-          surroundingContext: getFullEditorText().slice(0, 1000),
+          fullText: getFullEditorText(),
+          selectionStart: selectedRangeForRewrite.start,
+          selectionEnd: selectedRangeForRewrite.end,
         }),
       });
 

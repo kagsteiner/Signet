@@ -3,11 +3,13 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 const db = require('./db');
 const chapters = require('./public/chapters');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
+const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/$/, ''); // e.g. '' or '/signet'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const chapterIndexCache = new Map();
 
@@ -47,9 +49,9 @@ app.get('/enter/:accessKey', enterLimiter, (req, res) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
     maxAge: db.SESSION_DURATION_MS,
-    path: '/',
+    path: BASE_PATH || '/',
   });
-  res.redirect('/app');
+  res.redirect(`${BASE_PATH}/app`);
 });
 
 // --- App page ---
@@ -58,7 +60,12 @@ app.get('/app', (req, res) => {
   if (!sessionId || !db.findValidSession(sessionId)) {
     return res.status(401).send(renderErrorPage('Please use your personal access link to enter.'));
   }
-  res.sendFile(path.join(__dirname, 'public', 'app.html'));
+  const htmlPath = path.join(__dirname, 'public', 'app.html');
+  let html = fs.readFileSync(htmlPath, 'utf8');
+  if (BASE_PATH) {
+    html = html.replace('<head>', `<head><base href="${BASE_PATH}/">`);
+  }
+  res.type('html').send(html);
 });
 
 // --- Auth check ---
@@ -140,11 +147,13 @@ app.post('/api/continue', requireAuth, async (req, res) => {
 // --- AI Rewrite ---
 app.post('/api/rewrite', requireAuth, async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
-  const { selectedText, instruction, surroundingContext } = req.body;
+  const { selectedText, instruction, fullText, selectionStart, selectionEnd } = req.body;
   if (!selectedText || !instruction) return res.status(400).json({ error: 'Missing text or instruction' });
 
   try {
-    const result = await callRewrite(selectedText, instruction, surroundingContext);
+    const selectedHasOuterQuotes = hasOuterMatchingQuotes(selectedText);
+    const rewriteContext = buildRewriteContext(fullText, selectionStart, selectionEnd, selectedText);
+    const result = await callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes);
     res.json({ rewritten: result });
   } catch (err) {
     console.error('Rewrite error:', err);
@@ -156,7 +165,7 @@ app.post('/api/rewrite', requireAuth, async (req, res) => {
 app.get('/', (req, res) => {
   const sessionId = req.cookies.session;
   if (sessionId && db.findValidSession(sessionId)) {
-    return res.redirect('/app');
+    return res.redirect(`${BASE_PATH}/app`);
   }
   res.send(renderErrorPage('Storytellers is invitation-only. Please use your personal access link.'));
 });
@@ -192,24 +201,125 @@ async function callOpenAI(systemPrompt, userContent) {
   return response.choices[0].message.content.trim();
 }
 
-async function callRewrite(selectedText, instruction, surroundingContext) {
+function hasOuterMatchingQuotes(text) {
+  if (typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return false;
+  const pairs = new Map([
+    ['"', '"'],
+    ["'", "'"],
+    ['“', '”'],
+    ['‘', '’'],
+  ]);
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  return pairs.has(first) && pairs.get(first) === last;
+}
+
+function stripOneOuterQuotePair(text) {
+  if (typeof text !== 'string') return text;
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return trimmed;
+  const pairs = new Map([
+    ['"', '"'],
+    ["'", "'"],
+    ['“', '”'],
+    ['‘', '’'],
+  ]);
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  if (pairs.has(first) && pairs.get(first) === last) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function normalizeRewriteResult(rawResult, selectedHasOuterQuotes) {
+  let result = typeof rawResult === 'string' ? rawResult.trim() : '';
+  if (!result) return result;
+  if (!selectedHasOuterQuotes) {
+    // Some models still wrap output in quotes even when instructed not to.
+    result = stripOneOuterQuotePair(result);
+  }
+  return result;
+}
+
+function buildRewriteContext(fullText, startRaw, endRaw, selectedText) {
+  if (typeof fullText !== 'string') return null;
+  const start = Number(startRaw);
+  const end = Number(endRaw);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+
+  const safeStart = Math.max(0, Math.min(start, end, fullText.length));
+  const safeEnd = Math.max(0, Math.min(Math.max(start, end), fullText.length));
+  if (safeStart === safeEnd) return null;
+  if (fullText.slice(safeStart, safeEnd) !== selectedText) return null;
+
+  const breakRegex = /\n\s*\n/g;
+  const paragraphs = [];
+  let paraStart = 0;
+  let match = breakRegex.exec(fullText);
+  while (match) {
+    paragraphs.push({ start: paraStart, end: match.index });
+    paraStart = match.index + match[0].length;
+    match = breakRegex.exec(fullText);
+  }
+  paragraphs.push({ start: paraStart, end: fullText.length });
+
+  const overlapping = paragraphs.filter((paragraph) => paragraph.end > safeStart && paragraph.start < safeEnd);
+  if (overlapping.length === 0) return null;
+
+  const contextStart = overlapping[0].start;
+  const contextEnd = overlapping[overlapping.length - 1].end;
+  const contextText = fullText.slice(contextStart, contextEnd);
+  const relStart = safeStart - contextStart;
+  const relEnd = safeEnd - contextStart;
+  const marked =
+    contextText.slice(0, relStart) +
+    '[[selection]]' +
+    contextText.slice(relStart, relEnd) +
+    '[[/selection]]' +
+    contextText.slice(relEnd);
+
+  return {
+    contextParagraphsWithSelection: marked,
+    selectedText,
+  };
+}
+
+async function callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes) {
   const OpenAI = require('openai');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-  let userMsg = `Selected text to transform:\n"${selectedText}"\n\nInstruction: ${instruction}`;
-  if (surroundingContext) userMsg += `\n\nSurrounding context for tone/style reference:\n${surroundingContext}`;
+  let userMsg = `Instruction: ${instruction}`;
+  if (rewriteContext && rewriteContext.contextParagraphsWithSelection) {
+    userMsg += `\n\nBelow are the full paragraph(s) containing the selected text. The selected span is marked with [[selection]]...[[/selection]].\n\n${rewriteContext.contextParagraphsWithSelection}`;
+  } else {
+    userMsg += `\n\nSelected span:\n[[selection]]${selectedText}[[/selection]]`;
+  }
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [
       {
         role: 'system',
-        content: `You are a literary editor. Transform the selected text according to the user's instruction. Output ONLY the transformed text. No explanations, no quotes around the output, no commentary.`,
+        content: `You are a literary editor.
+Your task:
+1) Identify the exact text between [[selection]] and [[/selection]].
+2) Rewrite ONLY that selected text based on the instruction.
+3) Keep it consistent with the paragraph context.
+
+Output rules:
+- Return ONLY the rewritten replacement text for the selected span.
+- Do NOT return full paragraphs, markers, labels, or explanations.
+- Do NOT add surrounding quotation marks unless the original selected text is itself surrounded by matching quotation marks.
+- Do not include backticks.`,
       },
       { role: 'user', content: userMsg },
     ],
     max_tokens: 200,
     temperature: 0.7,
   });
-  return response.choices[0].message.content.trim();
+  const raw = response.choices[0].message.content || '';
+  return normalizeRewriteResult(raw, selectedHasOuterQuotes);
 }
 
 function renderErrorPage(message) {
