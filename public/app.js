@@ -655,11 +655,39 @@
   }
 
   // --- The Gem: continuation ---
-  async function triggerContinuation() {
+  function detectContinuationModeAtCursor() {
+    const text = getEditorText();
+    const cursorOffset = getCursorOffset();
+    const lineStart = text.lastIndexOf('\n', Math.max(0, cursorOffset - 1)) + 1;
+    const prevLineEnd = Math.max(0, lineStart - 1);
+    const prevLineStart = text.lastIndexOf('\n', Math.max(0, prevLineEnd - 1)) + 1;
+
+    const currentLine = text.slice(lineStart, text.indexOf('\n', cursorOffset) === -1 ? text.length : text.indexOf('\n', cursorOffset));
+    const previousLine = text.slice(prevLineStart, prevLineEnd);
+
+    if (currentLine.trim() === '' && previousLine.trim() === '') {
+      return 'paragraph_start';
+    }
+
+    const beforeCursor = text.slice(0, cursorOffset).trimEnd();
+    if (beforeCursor && !/[.!?]["')\]]?\s*$/.test(beforeCursor)) {
+      return 'mid_sentence';
+    }
+
+    return 'default';
+  }
+
+  async function triggerContinuation(options = {}) {
     if (gem.classList.contains('loading')) return;
 
-    const precedingText = getFullEditorText().trim();
-    if (!precedingText) return;
+    const source = options.source || 'gem';
+    const text = getEditorText();
+    const cursorOffset = getCursorOffset();
+    const mode = options.mode || (source === 'shortcut' ? detectContinuationModeAtCursor() : 'default');
+    const beforeCursor = text.slice(0, cursorOffset);
+    const afterCursor = text.slice(cursorOffset);
+    const precedingText = source === 'shortcut' ? beforeCursor : getFullEditorText().trim();
+    if (!precedingText.trim()) return;
 
     gem.classList.add('loading');
     gem.classList.add('active');
@@ -675,12 +703,18 @@
         method: 'POST',
         body: JSON.stringify({
           precedingText: precedingText.slice(-2000),
+          followingText: afterCursor.slice(0, 400),
+          mode,
           storyIntent: storyIntentEl.value || null,
         }),
       });
 
       if (result && result.sentence) {
-        insertContinuation(result.sentence);
+        if (source === 'shortcut') {
+          insertContinuationAtCursor(result.sentence);
+        } else {
+          insertContinuation(result.sentence);
+        }
       }
     } catch {
       // silent fail
@@ -705,6 +739,21 @@
     const prefix = lastPeriod >= 0 ? ' ' : '. ';
     const updatedText = text.slice(0, insertPos) + prefix + sentence + text.slice(insertPos);
     const newCursor = insertPos + prefix.length + sentence.length;
+
+    renderEditorText(updatedText, { cursorOffset: newCursor });
+    lastKnownEditorText = updatedText;
+    scheduleSave();
+  }
+
+  function insertContinuationAtCursor(rawText) {
+    const continuation = (rawText || '').trim();
+    if (!continuation) return;
+
+    recordBeforeProgrammaticTextChange();
+    const text = getEditorText();
+    const cursorOffset = getCursorOffset();
+    const updatedText = text.slice(0, cursorOffset) + continuation + text.slice(cursorOffset);
+    const newCursor = cursorOffset + continuation.length;
 
     renderEditorText(updatedText, { cursorOffset: newCursor });
     lastKnownEditorText = updatedText;
@@ -743,7 +792,7 @@
       e.preventDefault();
       gem.classList.add('active');
       setTimeout(() => gem.classList.remove('active'), 300);
-      triggerContinuation();
+      triggerContinuation({ source: 'shortcut' });
     }
   }
 
@@ -844,10 +893,32 @@
   }
 
   // --- Export ---
+  function buildMarkdownExport(manuscript) {
+    const source = typeof manuscript === 'string' ? manuscript : '';
+    if (!source) return '';
+    if (!Chapters.parseChapters || !Chapters.splitLinesWithOffsets) return source;
+
+    const parsedChapters = Chapters.parseChapters(source);
+    const titleStartOffsets = new Set(
+      parsedChapters
+        .filter((chapter) => chapter.title && typeof chapter.title.startOffset === 'number')
+        .map((chapter) => chapter.title.startOffset)
+    );
+    if (titleStartOffsets.size === 0) return source;
+
+    const lines = Chapters.splitLinesWithOffsets(source);
+    return lines.map((line) => {
+      if (!titleStartOffsets.has(line.startOffset)) return line.text;
+      if (line.trimmed.startsWith('#')) return line.text;
+      return `# ${line.trimmed}`;
+    }).join('\n');
+  }
+
   function exportAsMarkdown() {
     if (!currentStory) return;
     const manuscript = getEditorText();
-    downloadFile(`${currentStory.title}.md`, manuscript, 'text/markdown');
+    const markdown = buildMarkdownExport(manuscript);
+    downloadFile(`${currentStory.title}.md`, markdown, 'text/markdown');
     hideStoryOverlay();
   }
 
@@ -911,7 +982,7 @@
 
   gem.addEventListener('click', (e) => {
     e.preventDefault();
-    triggerContinuation();
+    triggerContinuation({ source: 'gem' });
   });
 
   document.addEventListener('keydown', handleKeydown);

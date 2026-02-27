@@ -163,12 +163,12 @@ app.get('/api/stories/:id/chapter-context', requireAuth, (req, res) => {
 // --- AI Continuation (The Gem) ---
 app.post('/api/continue', requireAuth, async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
-  const { precedingText, storyIntent } = req.body;
+  const { precedingText, followingText, storyIntent, mode } = req.body;
   if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
   try {
-    const systemPrompt = buildContinuationPrompt(storyIntent);
-    const result = await callOpenAI(systemPrompt, precedingText);
+    const systemPrompt = buildContinuationPrompt(storyIntent, mode);
+    const result = await callOpenAI(systemPrompt, precedingText, followingText, mode);
     res.json({ sentence: result });
   } catch (err) {
     console.error('Continuation error:', err);
@@ -204,7 +204,8 @@ app.get('/', (req, res) => {
 
 // --- AI helpers ---
 
-function buildContinuationPrompt(storyIntent) {
+function buildContinuationPrompt(storyIntent, modeRaw) {
+  const mode = typeof modeRaw === 'string' ? modeRaw : 'default';
   let prompt = `You are a literary ghost writer. You write exactly one sentence to continue the narrative.
 
 Rules:
@@ -212,22 +213,45 @@ Rules:
 - Exactly one complete sentence, ending with appropriate punctuation.
 - Maximum 25-30 words.
 - Match the tense, POV, and tone of the preceding text.
+- Obey the story intent.
 - Avoid clichés, exposition dumps, meta commentary, and summarizing.
 - The sentence must feel like a natural next beat in the story.
 - Never explain yourself. Never add quotes or attribution to your output.`;
+
+  if (mode === 'mid_sentence') {
+    prompt += `\n\nMode: mid-sentence completion.
+- Continue from the exact in-progress sentence at the cursor.
+- Match diction, rhythm, and emotional texture as tightly as possible.
+- Output only the missing continuation text to insert at the cursor.
+- Do not repeat text already provided before the cursor.
+- End naturally (punctuation is allowed if it fits).`;
+  } else if (mode === 'paragraph_start') {
+    prompt += `\n\nMode: beginning-of-paragraph continuation.
+- The cursor is at a blank new paragraph boundary.
+- Infer immediate narrative intent from recent context and story intent.
+- Write one plausible paragraph-opening sentence that moves the story forward.
+- Prefer concrete action, decision, or sensory shift over abstract summary.`;
+  }
 
   if (storyIntent) prompt += `\n\nStory intent (private, for context only): ${storyIntent}`;
   return prompt;
 }
 
-async function callOpenAI(systemPrompt, userContent) {
+async function callOpenAI(systemPrompt, precedingText, followingText, modeRaw) {
   const OpenAI = require('openai');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+  const mode = typeof modeRaw === 'string' ? modeRaw : 'default';
+  let userContent = `Continue this text with exactly one sentence:\n\n${precedingText}`;
+  if (mode === 'mid_sentence') {
+    userContent = `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite the exact continuation text to insert at the cursor.`;
+  } else if (mode === 'paragraph_start') {
+    userContent = `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite one opening sentence for the new paragraph at the cursor.`;
+  }
   const response = await client.chat.completions.create({
     model: 'gpt-5.2',
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: `Continue this text with exactly one sentence:\n\n${userContent}` },
+      { role: 'user', content: userContent },
     ]
   });
   return response.choices[0].message.content.trim();
@@ -336,7 +360,7 @@ async function callRewrite(selectedText, instruction, rewriteContext, selectedHa
         content: `You are a literary editor.
 Your task:
 1) Identify the exact text between [[selection]] and [[/selection]].
-2) Rewrite ONLY that selected text based on the instruction.
+2) Rewrite ONLY that selected text based on the instruction. Follow the instruction exactly.
 3) Keep it consistent with the paragraph context.
 
 Output rules:
