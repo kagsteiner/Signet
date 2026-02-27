@@ -73,11 +73,12 @@ const FIRST_STORY_STARTER_MANUSCRIPT = `Welcome to Signet
 
 This is your manuscript space.
 A quiet page with wide margins.
-The text is sacred.
+The text is all that matters.
 
 When you’re writing and you get stuck, look for the Gem at the end of a paragraph.
 Click it to receive exactly one continuation sentence.
 Undo if it’s not yours.
+Type CTRL/CMD + Enter to continue anywhere.
 
 ---
 Chapters and intent
