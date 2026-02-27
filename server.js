@@ -3,15 +3,26 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
-const fs = require('fs');
 const db = require('./db');
 const chapters = require('./public/chapters');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
-const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/$/, ''); // e.g. '' or '/signet'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const chapterIndexCache = new Map();
+
+// Base path when behind a subpath (e.g. nginx at /signet/). From env or X-Script-Name header.
+function getBasePath(req) {
+  const fromEnv = (process.env.BASE_PATH || '').replace(/\/$/, '');
+  if (fromEnv) return fromEnv.startsWith('/') ? fromEnv : `/${fromEnv}`;
+  const fromHeader = (req && req.get('X-Script-Name')) || '';
+  return fromHeader.replace(/\/$/, '');
+}
+
+// Trust first proxy (nginx) so X-Forwarded-For is used for rate limiting and client IP
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
@@ -30,7 +41,7 @@ function requireAuth(req, res, next) {
   if (!sessionId) return res.status(401).json({ error: 'Not authenticated' });
   const session = db.findValidSession(sessionId);
   if (!session) {
-    res.clearCookie('session');
+    res.clearCookie('session', { path: getBasePath(req) || '/' });
     return res.status(401).json({ error: 'Session expired' });
   }
   req.userId = session.user_id;
@@ -44,14 +55,15 @@ app.get('/enter/:accessKey', enterLimiter, (req, res) => {
   const user = db.findUserByAccessKeyHash(hash);
   if (!user) return res.status(404).send(renderErrorPage('Access key not recognized.'));
   const session = db.createSession(user.id);
+  const basePath = getBasePath(req);
   res.cookie('session', session.id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'Lax',
     maxAge: db.SESSION_DURATION_MS,
-    path: BASE_PATH || '/',
+    path: basePath || '/',
   });
-  res.redirect(`${BASE_PATH}/app`);
+  res.redirect(`${basePath}/app`);
 });
 
 // --- App page ---
@@ -60,12 +72,7 @@ app.get('/app', (req, res) => {
   if (!sessionId || !db.findValidSession(sessionId)) {
     return res.status(401).send(renderErrorPage('Please use your personal access link to enter.'));
   }
-  const htmlPath = path.join(__dirname, 'public', 'app.html');
-  let html = fs.readFileSync(htmlPath, 'utf8');
-  if (BASE_PATH) {
-    html = html.replace('<head>', `<head><base href="${BASE_PATH}/">`);
-  }
-  res.type('html').send(html);
+  res.sendFile(path.join(__dirname, 'public', 'app.html'));
 });
 
 // --- Auth check ---
@@ -165,7 +172,7 @@ app.post('/api/rewrite', requireAuth, async (req, res) => {
 app.get('/', (req, res) => {
   const sessionId = req.cookies.session;
   if (sessionId && db.findValidSession(sessionId)) {
-    return res.redirect(`${BASE_PATH}/app`);
+    return res.redirect(`${getBasePath(req)}/app`);
   }
   res.send(renderErrorPage('Storytellers is invitation-only. Please use your personal access link.'));
 });

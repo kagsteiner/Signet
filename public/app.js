@@ -2,6 +2,7 @@
   'use strict';
 
   const Chapters = window.StorytellersChapters || {};
+  const APP_BASE_PATH = window.location.pathname.replace(/\/app\/?$/, '');
 
   // --- State ---
   let currentStory = null;
@@ -48,13 +49,14 @@
 
   // --- API helpers ---
   async function api(url, opts = {}) {
-    const res = await fetch(url, {
+    const resolvedUrl = url.startsWith('/') ? `${APP_BASE_PATH}${url}` : url;
+    const res = await fetch(resolvedUrl, {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
       ...opts,
     });
     if (res.status === 401) {
-      window.location.href = '/';
+      window.location.href = `${APP_BASE_PATH}/`;
       return null;
     }
     if (!res.ok) throw new Error(`API error ${res.status}`);
