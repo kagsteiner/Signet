@@ -21,6 +21,11 @@
   let isApplyingHistory = false;
   let lastKnownEditorText = '';
   const isMacPlatform = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
+  const userAgent = navigator.userAgent || '';
+  const isIOSDevice = /iPad|iPhone|iPod/.test(userAgent)
+    || (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  const isAndroidDevice = /Android/.test(userAgent);
+  const shouldUseMobileRewritePositioning = isIOSDevice || isAndroidDevice;
   const CURSOR_BOTTOM_PADDING_LINES = 3;
 
   // --- DOM refs ---
@@ -854,6 +859,7 @@
 
   function showRewriteOverlay() {
     rewriteOverlay.classList.remove('hidden');
+    positionRewriteOverlay();
     rewritePreview.classList.add('hidden');
     rewriteSelected.textContent = selectedTextForRewrite;
     rewriteInput.value = '';
@@ -861,11 +867,61 @@
 
   function hideRewriteOverlay() {
     rewriteOverlay.classList.add('hidden');
+    rewriteOverlay.classList.remove('mobile-positioned');
+    rewriteOverlay.style.top = '';
+    delete rewriteOverlay.dataset.mobilePlacement;
     rewritePreview.classList.add('hidden');
     rewriteSelected.textContent = '';
     rewriteInput.value = '';
     selectedTextForRewrite = '';
     selectedRangeForRewrite = null;
+  }
+
+  function getSelectionMidpointY() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+    const rect = range.getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+    return rect.top + (rect.height / 2);
+  }
+
+  function getViewportMetrics() {
+    if (window.visualViewport) {
+      return {
+        top: window.visualViewport.offsetTop,
+        height: window.visualViewport.height,
+      };
+    }
+    return {
+      top: 0,
+      height: window.innerHeight,
+    };
+  }
+
+  function positionRewriteOverlay() {
+    if (!shouldUseMobileRewritePositioning) {
+      rewriteOverlay.classList.remove('mobile-positioned');
+      rewriteOverlay.style.top = '';
+      delete rewriteOverlay.dataset.mobilePlacement;
+      return;
+    }
+
+    const selectionMidpointY = getSelectionMidpointY();
+    if (selectionMidpointY === null) return;
+
+    const viewport = getViewportMetrics();
+    const viewportMiddleY = viewport.top + (viewport.height / 2);
+    const placeNearTop = selectionMidpointY > viewportMiddleY;
+    const inset = Math.max(20, Math.round(viewport.height * 0.08));
+    const targetTop = placeNearTop
+      ? viewport.top + inset
+      : viewport.top + viewport.height - inset;
+
+    rewriteOverlay.classList.add('mobile-positioned');
+    rewriteOverlay.dataset.mobilePlacement = placeNearTop ? 'top' : 'bottom';
+    rewriteOverlay.style.top = `${Math.round(targetTop)}px`;
   }
 
   async function submitRewrite() {
@@ -1062,10 +1118,20 @@
 
   window.addEventListener('resize', () => {
     if (!storyPanel.classList.contains('hidden')) positionStoryPanel();
+    if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
   });
   window.addEventListener('scroll', () => {
     if (!storyPanel.classList.contains('hidden')) hideStoryPanel();
+    if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
   }, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+    });
+    window.visualViewport.addEventListener('scroll', () => {
+      if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+    });
+  }
 
   rewriteInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
