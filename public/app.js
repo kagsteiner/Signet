@@ -1229,7 +1229,9 @@
     for (const line of lines) {
       if (Chapters.isDividerLine && Chapters.isDividerLine(line.text)) continue;
       if (chapterHeadingStartOffsets.has(line.startOffset)) {
+        processed.push('');
         processed.push(line.trimmed.startsWith('#') ? line.text : `${chapterHeadingPrefix}${line.trimmed}`);
+        processed.push('');
       } else {
         processed.push(line.text);
       }
