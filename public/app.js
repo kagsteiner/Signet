@@ -22,6 +22,8 @@
   let lastKnownEditorText = '';
   let gemIdleTimer = null;
   let gemLastTypingTimestamp = 0;
+  let remoteRefreshTimer = null;
+  let remoteRefreshInFlight = false;
   const isMacPlatform = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
   const userAgent = navigator.userAgent || '';
   const isIOSDevice = /iPad|iPhone|iPod/.test(userAgent)
@@ -94,6 +96,74 @@
     if (!data) return;
     currentStory = data.story;
     renderStory();
+  }
+
+  function hasUnsavedLocalChanges() {
+    if (!currentStory) return false;
+    const localText = getEditorText();
+    const knownServerText = currentStory.content_markdown || '';
+    return isSaving || Boolean(saveTimer) || localText !== knownServerText;
+  }
+
+  function applyStoryFromServer(storyFromServer) {
+    if (!storyFromServer) return;
+    const previousSelection = getSelectionSnapshot();
+    const previousScrollY = window.scrollY;
+    currentStory = storyFromServer;
+
+    titleBtn.textContent = currentStory.title;
+    document.title = `${currentStory.title} — Signet`;
+    storyIntentEl.value = currentStory.story_intent || '';
+
+    const nextText = currentStory.content_markdown || '';
+    const nextStart = Math.min(previousSelection.start, nextText.length);
+    const nextEnd = Math.min(previousSelection.end, nextText.length);
+    renderEditorText(nextText, { cursorOffset: nextEnd });
+    setSelectionOffsets(nextStart, nextEnd);
+    lastKnownEditorText = nextText;
+    resetHistoryForText(nextText);
+    updateGemVisibility();
+
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: previousScrollY, left: 0, behavior: 'auto' });
+    });
+  }
+
+  async function refreshCurrentStoryIfUpdated() {
+    if (!currentStory || remoteRefreshInFlight) return;
+    if (hasUnsavedLocalChanges()) return;
+    remoteRefreshInFlight = true;
+    try {
+      const data = await api(`/api/stories/${currentStory.id}`);
+      if (!data || !data.story) return;
+      const nextStory = data.story;
+      const localLastModified = Number(currentStory.last_modified) || 0;
+      const remoteLastModified = Number(nextStory.last_modified) || 0;
+      const hasChanged =
+        remoteLastModified > localLastModified
+        || nextStory.content_markdown !== (currentStory.content_markdown || '')
+        || nextStory.title !== currentStory.title
+        || (nextStory.story_intent || '') !== (currentStory.story_intent || '');
+      if (!hasChanged) return;
+
+      applyStoryFromServer(nextStory);
+      saveIndicator.textContent = 'Updated';
+      setTimeout(() => {
+        if (saveIndicator.textContent === 'Updated') saveIndicator.textContent = '';
+      }, 2000);
+    } catch {
+      // silent refresh failure
+    } finally {
+      remoteRefreshInFlight = false;
+    }
+  }
+
+  function scheduleRemoteRefresh() {
+    if (remoteRefreshTimer) clearTimeout(remoteRefreshTimer);
+    remoteRefreshTimer = setTimeout(() => {
+      remoteRefreshTimer = null;
+      refreshCurrentStoryIfUpdated();
+    }, 250);
   }
 
   function renderStory() {
@@ -1189,6 +1259,12 @@
   });
 
   document.addEventListener('keydown', handleKeydown);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) scheduleRemoteRefresh();
+  });
+  window.addEventListener('focus', scheduleRemoteRefresh);
+  window.addEventListener('pageshow', scheduleRemoteRefresh);
 
   titleBtn.addEventListener('click', toggleStoryPanel);
   titleBtn.addEventListener('dblclick', (e) => {
