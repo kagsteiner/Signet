@@ -926,20 +926,39 @@
     if (!source) return '';
     if (!Chapters.parseChapters || !Chapters.splitLinesWithOffsets) return source;
 
+    const lines = Chapters.splitLinesWithOffsets(source);
     const parsedChapters = Chapters.parseChapters(source);
     const titleStartOffsets = new Set(
       parsedChapters
         .filter((chapter) => chapter.title && typeof chapter.title.startOffset === 'number')
         .map((chapter) => chapter.title.startOffset)
     );
-    if (titleStartOffsets.size === 0) return source;
 
-    const lines = Chapters.splitLinesWithOffsets(source);
-    return lines.map((line) => {
-      if (!titleStartOffsets.has(line.startOffset)) return line.text;
-      if (line.trimmed.startsWith('#')) return line.text;
-      return `# ${line.trimmed}`;
-    }).join('\n');
+    const processed = [];
+    for (const line of lines) {
+      if (Chapters.isDividerLine && Chapters.isDividerLine(line.text)) continue;
+      if (titleStartOffsets.has(line.startOffset)) {
+        processed.push(line.trimmed.startsWith('#') ? line.text : `# ${line.trimmed}`);
+      } else {
+        processed.push(line.text);
+      }
+    }
+
+    const paragraphs = [];
+    let current = [];
+    for (const line of processed) {
+      if (line.trim() === '') {
+        if (current.length) {
+          paragraphs.push(current);
+          current = [];
+        }
+      } else {
+        current.push(line);
+      }
+    }
+    if (current.length) paragraphs.push(current);
+
+    return paragraphs.map((p) => p.join('\n')).join('\n\n');
   }
 
   function exportAsMarkdown() {
