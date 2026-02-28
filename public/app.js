@@ -11,6 +11,7 @@
   let stories = [];
   let saveTimer = null;
   let intentSaveTimer = null;
+  let metadataSaveTimer = null;
   let isSaving = false;
   let gemHintShown = localStorage.getItem('gemHintShown') === '1';
   let storyPanelHideTimer = null;
@@ -42,6 +43,8 @@
   const gemContainer = document.getElementById('gem-container');
   const gem = document.getElementById('gem');
   const storyIntentEl = document.getElementById('story-intent');
+  const storyTitleInput = document.getElementById('story-title-input');
+  const storyAuthorInput = document.getElementById('story-author-input');
   const storyPanel = document.getElementById('story-panel');
   const storyPanelBackdrop = document.getElementById('story-panel-backdrop');
   const storyPanelChapters = document.getElementById('story-panel-chapters');
@@ -83,7 +86,7 @@
     stories = data.stories;
 
     if (stories.length === 0) {
-      const result = await api('/api/stories', { method: 'POST', body: JSON.stringify({ title: 'Untitled' }) });
+      const result = await api('/api/stories', { method: 'POST', body: JSON.stringify({}) });
       if (!result) return;
       stories = [result.story];
     }
@@ -111,8 +114,7 @@
     const previousScrollY = window.scrollY;
     currentStory = storyFromServer;
 
-    titleBtn.textContent = currentStory.title;
-    document.title = `${currentStory.title} — Signet`;
+    setStoryPanelFields(currentStory);
     storyIntentEl.value = currentStory.story_intent || '';
 
     const nextText = currentStory.content_markdown || '';
@@ -120,6 +122,7 @@
     const nextEnd = Math.min(previousSelection.end, nextText.length);
     renderEditorText(nextText, { cursorOffset: nextEnd });
     setSelectionOffsets(nextStart, nextEnd);
+    refreshStoryHeaderLabel(nextText);
     lastKnownEditorText = nextText;
     resetHistoryForText(nextText);
     updateGemVisibility();
@@ -142,7 +145,8 @@
       const hasChanged =
         remoteLastModified > localLastModified
         || nextStory.content_markdown !== (currentStory.content_markdown || '')
-        || nextStory.title !== currentStory.title
+        || (nextStory.title || '') !== (currentStory.title || '')
+        || (nextStory.author || '') !== (currentStory.author || '')
         || (nextStory.story_intent || '') !== (currentStory.story_intent || '');
       if (!hasChanged) return;
 
@@ -167,8 +171,8 @@
   }
 
   function renderStory() {
-    titleBtn.textContent = currentStory.title;
-    document.title = `${currentStory.title} — Signet`;
+    setStoryPanelFields(currentStory);
+    refreshStoryHeaderLabel(currentStory.content_markdown || '');
     storyIntentEl.value = currentStory.story_intent || '';
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
@@ -506,6 +510,64 @@
     return div.innerHTML;
   }
 
+  function normalizeMetadataText(value) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function truncateWithEllipsis(text, maxLength) {
+    if (typeof text !== 'string') return '';
+    const normalized = text.trim();
+    if (!normalized) return '';
+    if (!Number.isFinite(maxLength) || normalized.length <= maxLength) return normalized;
+    const clipped = normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd();
+    return `${clipped}...`;
+  }
+
+  function firstNonEmptyLine(text) {
+    if (typeof text !== 'string') return '';
+    const lines = text.split(/\r?\n/u);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) return trimmed;
+    }
+    return '';
+  }
+
+  function getStoryDisplayName(story, options = {}) {
+    const title = normalizeMetadataText(story && story.title);
+    if (title) return title;
+    const manuscript = typeof options.manuscript === 'string'
+      ? options.manuscript
+      : (story && story.content_markdown) || '';
+    const fallback = firstNonEmptyLine(manuscript);
+    if (fallback) {
+      const maxLength = Number.isFinite(options.maxLength) ? options.maxLength : 80;
+      return truncateWithEllipsis(fallback, maxLength);
+    }
+    return options.emptyFallback || 'Story';
+  }
+
+  function getExportFileBaseName(story, manuscript) {
+    const label = getStoryDisplayName(story, { manuscript, maxLength: 64, emptyFallback: 'story' });
+    const sanitized = label.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '').trim();
+    return sanitized || 'story';
+  }
+
+  function setStoryPanelFields(story) {
+    storyTitleInput.value = normalizeMetadataText(story && story.title);
+    storyAuthorInput.value = normalizeMetadataText(story && story.author);
+  }
+
+  function refreshStoryHeaderLabel(manuscriptOverride) {
+    if (!currentStory) return;
+    const manuscript = typeof manuscriptOverride === 'string'
+      ? manuscriptOverride
+      : (currentStory.content_markdown || '');
+    const displayName = getStoryDisplayName(currentStory, { manuscript, maxLength: 64, emptyFallback: 'Story' });
+    titleBtn.textContent = displayName;
+    document.title = `${displayName} — Signet`;
+  }
+
   // --- Auto-save ---
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -553,21 +615,30 @@
     } catch { /* silent */ }
   }
 
-  // --- Title editing ---
-  function promptRenameStory() {
-    const newTitle = prompt('Story title:', currentStory.title);
-    if (newTitle && newTitle.trim() && newTitle.trim() !== currentStory.title) {
-      api(`/api/stories/${currentStory.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ title: newTitle.trim() }),
-      }).then(result => {
-        if (result) {
-          currentStory = result.story;
-          titleBtn.textContent = currentStory.title;
-          document.title = `${currentStory.title} — Signet`;
-        }
-      });
+  // --- Story metadata ---
+  function scheduleMetadataSave() {
+    if (metadataSaveTimer) clearTimeout(metadataSaveTimer);
+    metadataSaveTimer = setTimeout(() => saveMetadata(), 900);
+  }
+
+  async function saveMetadata() {
+    if (!currentStory) return;
+    const title = normalizeMetadataText(storyTitleInput.value);
+    const author = normalizeMetadataText(storyAuthorInput.value);
+    if (title === normalizeMetadataText(currentStory.title) && author === normalizeMetadataText(currentStory.author)) {
+      return;
     }
+    try {
+      const result = await api(`/api/stories/${currentStory.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ title, author }),
+      });
+      if (result && result.story) {
+        currentStory = result.story;
+        setStoryPanelFields(currentStory);
+        refreshStoryHeaderLabel(currentStory.content_markdown || getEditorText());
+      }
+    } catch { /* silent */ }
   }
 
   function getChapterNavItems() {
@@ -588,7 +659,7 @@
           }
         }
       }
-      if (!label) label = 'Untitled';
+      if (!label) label = 'Chapter';
 
       return {
         id: chapter.id || `chapter-${index}`,
@@ -668,9 +739,6 @@
     requestAnimationFrame(() => {
       storyPanelBackdrop.classList.add('open');
       storyPanel.classList.add('open');
-      storyIntentEl.focus({ preventScroll: true });
-      const len = storyIntentEl.value.length;
-      storyIntentEl.setSelectionRange(len, len);
     });
   }
 
@@ -703,8 +771,9 @@
     for (const s of stories) {
       const li = document.createElement('li');
       if (currentStory && s.id === currentStory.id) li.classList.add('active');
+      const displayName = getStoryDisplayName(s, { maxLength: 68, emptyFallback: 'Story' });
       li.innerHTML = `
-        <span class="story-name">${escapeHtml(s.title)}</span>
+        <span class="story-name">${escapeHtml(displayName)}</span>
         <span class="story-date">${formatRelativeDate(s.last_modified)}</span>
       `;
       li.addEventListener('click', () => {
@@ -1135,24 +1204,32 @@
   }
 
   // --- Export ---
-  function buildMarkdownExport(manuscript) {
+  function buildMarkdownExport(story, manuscript) {
     const source = typeof manuscript === 'string' ? manuscript : '';
     if (!source) return '';
     if (!Chapters.parseChapters || !Chapters.splitLinesWithOffsets) return source;
 
+    const title = normalizeMetadataText(story && story.title);
+    const author = normalizeMetadataText(story && story.author);
+    const chapterHeadingPrefix = title ? '## ' : '# ';
     const lines = Chapters.splitLinesWithOffsets(source);
     const parsedChapters = Chapters.parseChapters(source);
-    const titleStartOffsets = new Set(
-      parsedChapters
-        .filter((chapter) => chapter.title && typeof chapter.title.startOffset === 'number')
-        .map((chapter) => chapter.title.startOffset)
-    );
+    const chapterHeadingStartOffsets = new Set();
+    for (const chapter of parsedChapters) {
+      for (const line of lines) {
+        if (line.startOffset < chapter.startOffset) continue;
+        if (line.startOffset >= chapter.endOffset) break;
+        if (!line.trimmed || (Chapters.isDividerLine && Chapters.isDividerLine(line.text))) continue;
+        chapterHeadingStartOffsets.add(line.startOffset);
+        break;
+      }
+    }
 
     const processed = [];
     for (const line of lines) {
       if (Chapters.isDividerLine && Chapters.isDividerLine(line.text)) continue;
-      if (titleStartOffsets.has(line.startOffset)) {
-        processed.push(line.trimmed.startsWith('#') ? line.text : `# ${line.trimmed}`);
+      if (chapterHeadingStartOffsets.has(line.startOffset)) {
+        processed.push(line.trimmed.startsWith('#') ? line.text : `${chapterHeadingPrefix}${line.trimmed}`);
       } else {
         processed.push(line.text);
       }
@@ -1172,21 +1249,34 @@
     }
     if (current.length) paragraphs.push(current);
 
-    return paragraphs.map((p) => p.join('\n')).join('\n\n');
+    const manuscriptBody = paragraphs.map((p) => p.join('\n')).join('\n\n');
+    if (!title && !author) return manuscriptBody;
+
+    const preface = [];
+    if (title) preface.push(`# ${title}`);
+    if (author) preface.push(author);
+    return `${preface.join('\n\n')}\n\n${manuscriptBody}`.trim();
   }
 
   function exportAsMarkdown() {
     if (!currentStory) return;
     const manuscript = getEditorText();
-    const markdown = buildMarkdownExport(manuscript);
-    downloadFile(`${currentStory.title}.md`, markdown, 'text/markdown');
+    const markdown = buildMarkdownExport(currentStory, manuscript);
+    const fileBase = getExportFileBaseName(currentStory, manuscript);
+    downloadFile(`${fileBase}.md`, markdown, 'text/markdown');
     hideStoryOverlay();
   }
 
   function exportAsPlainText() {
     if (!currentStory) return;
     const text = getFullEditorText();
-    downloadFile(`${currentStory.title}.txt`, text, 'text/plain');
+    const title = normalizeMetadataText(currentStory.title);
+    const author = normalizeMetadataText(currentStory.author);
+    const prefixed = title || author
+      ? `${[title ? title : '', author ? author : ''].filter(Boolean).join('\n\n')}\n\n${text}`
+      : text;
+    const fileBase = getExportFileBaseName(currentStory, text);
+    downloadFile(`${fileBase}.txt`, prefixed, 'text/plain');
     hideStoryOverlay();
   }
 
@@ -1202,9 +1292,7 @@
 
   // --- New story ---
   async function createNewStory() {
-    const title = prompt('Story title:', 'Untitled');
-    if (!title) return;
-    const result = await api('/api/stories', { method: 'POST', body: JSON.stringify({ title: title.trim() || 'Untitled' }) });
+    const result = await api('/api/stories', { method: 'POST', body: JSON.stringify({}) });
     if (result) {
       hideStoryOverlay();
       await loadStory(result.story.id);
@@ -1228,6 +1316,7 @@
     renderEditorText(text, { cursorOffset });
     lastKnownEditorText = text;
     pendingBeforeInputSnapshot = null;
+    refreshStoryHeaderLabel(text);
     scheduleSave();
     updateGemVisibility({ typing: true });
     ensureCursorBottomPadding();
@@ -1267,12 +1356,6 @@
   window.addEventListener('pageshow', scheduleRemoteRefresh);
 
   titleBtn.addEventListener('click', toggleStoryPanel);
-  titleBtn.addEventListener('dblclick', (e) => {
-    e.stopPropagation();
-    hideStoryPanel();
-    hideStoryOverlay();
-    promptRenameStory();
-  });
 
   storyOverlay.addEventListener('click', (e) => {
     if (e.target === storyOverlay) hideStoryOverlay();
@@ -1281,6 +1364,10 @@
   newStoryBtn.addEventListener('click', createNewStory);
   exportMdBtn.addEventListener('click', exportAsMarkdown);
   exportTxtBtn.addEventListener('click', exportAsPlainText);
+  storyTitleInput.addEventListener('input', scheduleMetadataSave);
+  storyAuthorInput.addEventListener('input', scheduleMetadataSave);
+  storyTitleInput.addEventListener('blur', saveMetadata);
+  storyAuthorInput.addEventListener('blur', saveMetadata);
   storyIntentEl.addEventListener('input', scheduleIntentSave);
   storyIntentEl.addEventListener('blur', saveIntents);
   manageStoriesLink.addEventListener('click', () => {

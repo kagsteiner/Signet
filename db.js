@@ -36,7 +36,8 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS stories (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      title TEXT NOT NULL,
+      title TEXT,
+      author TEXT,
       content_markdown TEXT NOT NULL,
       story_intent TEXT,
       chapter_intent TEXT,
@@ -51,6 +52,13 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user
       ON sessions(user_id);
   `);
+
+  // Lightweight migration for existing installs.
+  const storyColumns = db.prepare('PRAGMA table_info(stories)').all();
+  const hasAuthor = storyColumns.some((column) => column.name === 'author');
+  if (!hasAuthor) {
+    db.exec('ALTER TABLE stories ADD COLUMN author TEXT');
+  }
 }
 
 function generateId() {
@@ -150,17 +158,19 @@ function cleanExpiredSessions() {
 
 // --- Story operations ---
 
-function createStory(userId, title = 'Untitled', options = {}) {
+function createStory(userId, options = {}) {
   const d = getDb();
   const id = generateId();
   const timestamp = now();
+  const title = typeof options.title === 'string' ? options.title : '';
+  const author = typeof options.author === 'string' ? options.author : '';
   const initialContent = options.initialContent !== undefined ? options.initialContent : '';
-  d.prepare('INSERT INTO stories (id, user_id, title, content_markdown, story_intent, chapter_intent, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, initialContent, null, null, timestamp, timestamp);
-  return { id, user_id: userId, title, content_markdown: initialContent, story_intent: null, chapter_intent: null, last_modified: timestamp, created_at: timestamp };
+  d.prepare('INSERT INTO stories (id, user_id, title, author, content_markdown, story_intent, chapter_intent, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, author, initialContent, null, null, timestamp, timestamp);
+  return { id, user_id: userId, title, author, content_markdown: initialContent, story_intent: null, chapter_intent: null, last_modified: timestamp, created_at: timestamp };
 }
 
 function getUserStories(userId) {
-  return getDb().prepare('SELECT id, title, last_modified, created_at FROM stories WHERE user_id = ? ORDER BY last_modified DESC').all(userId);
+  return getDb().prepare('SELECT id, title, author, content_markdown, last_modified, created_at FROM stories WHERE user_id = ? ORDER BY last_modified DESC').all(userId);
 }
 
 function getStory(storyId, userId) {
@@ -169,7 +179,7 @@ function getStory(storyId, userId) {
 
 function updateStory(storyId, userId, fields) {
   const d = getDb();
-  const allowed = ['title', 'content_markdown', 'story_intent'];
+  const allowed = ['title', 'author', 'content_markdown', 'story_intent'];
   const sets = [];
   const values = [];
   for (const key of allowed) {

@@ -114,10 +114,11 @@ app.get('/api/stories', requireAuth, (req, res) => {
 });
 
 app.post('/api/stories', requireAuth, (req, res) => {
-  const title = req.body.title || 'Untitled';
   const existingStories = db.getUserStories(req.userId);
   const isFirstStory = existingStories.length === 0;
-  const story = db.createStory(req.userId, title, {
+  const story = db.createStory(req.userId, {
+    title: typeof req.body.title === 'string' ? req.body.title : '',
+    author: typeof req.body.author === 'string' ? req.body.author : '',
     initialContent: isFirstStory ? db.FIRST_STORY_STARTER_MANUSCRIPT : '',
   });
   res.json({ story: buildStoryResponse(story) });

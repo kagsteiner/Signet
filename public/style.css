@@ -347,6 +347,33 @@ body {
   border-top: 1px solid rgba(226, 217, 206, 0.9);
 }
 
+.story-panel-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.story-panel-meta input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 0.5rem 0.65rem;
+  outline: none;
+}
+
+.story-panel-meta input:focus {
+  border-color: var(--accent);
+}
+
+.story-panel-meta input::placeholder {
+  color: var(--text-faint);
+}
+
 .story-panel-intent label {
   display: block;
   margin-bottom: 0.45rem;
