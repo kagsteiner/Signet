@@ -103,11 +103,9 @@
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
     resetHistoryForText(storyText);
-    if (!storyText.trim()) {
-      requestAnimationFrame(() => {
-        focusEditorAtEnd();
-      });
-    }
+    requestAnimationFrame(() => {
+      focusEditorAtEnd();
+    });
     updateGemVisibility();
   }
 
@@ -314,6 +312,7 @@
     if (!editor) return;
     editor.focus({ preventScroll: true });
     setCursorOffset(getEditorText().length);
+    ensureCursorBottomPadding();
   }
 
   function getEditorLineHeightPx() {
