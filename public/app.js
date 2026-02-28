@@ -20,6 +20,8 @@
   let pendingBeforeInputSnapshot = null;
   let isApplyingHistory = false;
   let lastKnownEditorText = '';
+  let gemIdleTimer = null;
+  let gemLastTypingTimestamp = 0;
   const isMacPlatform = /Mac|iPod|iPhone|iPad/.test(navigator.platform || '');
   const userAgent = navigator.userAgent || '';
   const isIOSDevice = /iPad|iPhone|iPod/.test(userAgent)
@@ -27,10 +29,13 @@
   const isAndroidDevice = /Android/.test(userAgent);
   const shouldUseMobileRewritePositioning = isIOSDevice || isAndroidDevice;
   const CURSOR_BOTTOM_PADDING_LINES = 3;
+  const GEM_IDLE_APPEAR_DELAY_MS = 1000;
+  const GEM_END_OFFSET_PX = 8;
 
   // --- DOM refs ---
   const titleBtn = document.getElementById('story-title-btn');
   const saveIndicator = document.getElementById('save-indicator');
+  const editorContainer = document.getElementById('editor-container');
   const editor = document.getElementById('editor');
   const gemContainer = document.getElementById('gem-container');
   const gem = document.getElementById('gem');
@@ -98,6 +103,11 @@
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
     resetHistoryForText(storyText);
+    if (!storyText.trim()) {
+      requestAnimationFrame(() => {
+        focusEditorAtEnd();
+      });
+    }
     updateGemVisibility();
   }
 
@@ -298,6 +308,12 @@
     range.setEnd(endPos.container, endPos.offset);
     selection.removeAllRanges();
     selection.addRange(range);
+  }
+
+  function focusEditorAtEnd() {
+    if (!editor) return;
+    editor.focus({ preventScroll: true });
+    setCursorOffset(getEditorText().length);
   }
 
   function getEditorLineHeightPx() {
@@ -648,34 +664,105 @@
   }
 
   // --- Gem visibility ---
-  function updateGemVisibility() {
-    try {
-      const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0 || sel.anchorNode === null) {
-        gem.classList.remove('visible');
-        return;
-      }
-
-      if (!editor.contains(sel.anchorNode) && sel.anchorNode !== editor) {
-        gem.classList.remove('visible');
-        return;
-      }
-
-      const text = getTextUpToCursor();
-      const trimmed = text.trimEnd();
-      if (trimmed.endsWith('.')) {
-        gem.classList.add('visible');
-      } else {
-        gem.classList.remove('visible');
-      }
-    } catch {
-      gem.classList.remove('visible');
-    }
+  function hideGem() {
+    gem.classList.remove('visible');
+    gemContainer.style.height = '0px';
   }
 
-  function getTextUpToCursor() {
-    const full = getEditorText();
-    return full.slice(0, getCursorOffset());
+  function clearGemIdleTimer() {
+    if (!gemIdleTimer) return;
+    clearTimeout(gemIdleTimer);
+    gemIdleTimer = null;
+  }
+
+  function canRenderGem() {
+    if (!currentStory) return false;
+    if (!editorContainer || !editor || !gemContainer || !gem) return false;
+    if (!storyOverlay.classList.contains('hidden')) return false;
+    if (!rewriteOverlay.classList.contains('hidden')) return false;
+    return getEditorText().trim().length > 0;
+  }
+
+  function positionGemAtStoryEnd() {
+    const fullText = getEditorText();
+    if (!fullText.trim()) return false;
+
+    const trimmedLength = fullText.replace(/\s+$/u, '').length;
+    const endOffset = Math.max(0, trimmedLength);
+    const endPosition = resolvePositionForOffset(endOffset);
+    let anchorRect = null;
+
+    if (endPosition) {
+      const range = document.createRange();
+      range.setStart(endPosition.container, endPosition.offset);
+      range.collapse(true);
+      anchorRect = range.getBoundingClientRect();
+    }
+
+    if (!anchorRect || (!anchorRect.width && !anchorRect.height)) {
+      const line = getLineElementAtOffset(endOffset);
+      if (line) anchorRect = line.getBoundingClientRect();
+    }
+    if (!anchorRect) return false;
+
+    const containerRect = editorContainer.getBoundingClientRect();
+    const gemHeight = gem.offsetHeight || 24;
+    const gemWidth = gem.offsetWidth || 24;
+    const anchorHeight = anchorRect.height || getEditorLineHeightPx();
+    const top = (anchorRect.top - containerRect.top) + (anchorHeight / 2);
+    const unclampedLeft = (anchorRect.right - containerRect.left) + GEM_END_OFFSET_PX;
+    const maxLeft = Math.max(0, containerRect.width - gemWidth);
+    const left = Math.max(0, Math.min(unclampedLeft, maxLeft));
+
+    gemContainer.style.left = `${Math.round(left)}px`;
+    gemContainer.style.top = `${Math.round(top)}px`;
+    gemContainer.style.height = `${Math.round(gemHeight)}px`;
+    return true;
+  }
+
+  function revealGemIfReady() {
+    if (!canRenderGem()) {
+      hideGem();
+      return;
+    }
+    if (positionGemAtStoryEnd()) {
+      gem.classList.add('visible');
+      return;
+    }
+    hideGem();
+  }
+
+  function scheduleGemRevealAfterIdle() {
+    clearGemIdleTimer();
+    gemIdleTimer = setTimeout(() => {
+      gemIdleTimer = null;
+      revealGemIfReady();
+    }, GEM_IDLE_APPEAR_DELAY_MS);
+  }
+
+  function updateGemVisibility(options = {}) {
+    const typing = options.typing === true;
+    if (typing) {
+      gemLastTypingTimestamp = Date.now();
+      hideGem();
+      scheduleGemRevealAfterIdle();
+      return;
+    }
+
+    if (!canRenderGem()) {
+      clearGemIdleTimer();
+      hideGem();
+      return;
+    }
+
+    const elapsed = Date.now() - gemLastTypingTimestamp;
+    if (elapsed >= GEM_IDLE_APPEAR_DELAY_MS) {
+      revealGemIfReady();
+      return;
+    }
+
+    hideGem();
+    scheduleGemRevealAfterIdle();
   }
 
   function getFullEditorText() {
@@ -719,7 +806,9 @@
     const mode = options.mode || (source === 'shortcut' ? detectContinuationModeAtCursor() : 'default');
     const beforeCursor = text.slice(0, cursorOffset);
     const afterCursor = text.slice(cursorOffset);
-    const precedingText = source === 'shortcut' ? beforeCursor : getFullEditorText().trim();
+    const precedingText = source === 'shortcut'
+      ? beforeCursor
+      : getFullEditorText().replace(/\s+$/u, '');
     if (!precedingText.trim()) return;
 
     gem.classList.add('loading');
@@ -1071,7 +1160,7 @@
     lastKnownEditorText = text;
     pendingBeforeInputSnapshot = null;
     scheduleSave();
-    updateGemVisibility();
+    updateGemVisibility({ typing: true });
     ensureCursorBottomPadding();
   });
 
@@ -1084,6 +1173,15 @@
     updateGemVisibility();
     refreshChapterContextAtCursor();
     ensureCursorBottomPadding();
+  });
+
+  editorContainer.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (gem.contains(e.target)) return;
+    requestAnimationFrame(() => {
+      if (document.activeElement === editor || isSelectionInsideEditor()) return;
+      focusEditorAtEnd();
+    });
   });
 
   gem.addEventListener('click', (e) => {
@@ -1119,17 +1217,21 @@
   window.addEventListener('resize', () => {
     if (!storyPanel.classList.contains('hidden')) positionStoryPanel();
     if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+    updateGemVisibility();
   });
   window.addEventListener('scroll', () => {
     if (!storyPanel.classList.contains('hidden')) hideStoryPanel();
     if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+    updateGemVisibility();
   }, { passive: true });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
       if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+      updateGemVisibility();
     });
     window.visualViewport.addEventListener('scroll', () => {
       if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
+      updateGemVisibility();
     });
   }
 

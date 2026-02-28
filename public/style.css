@@ -254,27 +254,38 @@ body {
 /* --- The Gem --- */
 
 #gem-container {
-  display: flex;
-  justify-content: center;
-  margin-top: 1.5rem;
-  min-height: 2.5rem;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 20;
 }
 
 .gem {
+  position: absolute;
+  left: 0;
+  top: 0;
   font-size: 1.3rem;
   color: var(--text-faint);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0.4rem 0.8rem;
+  padding: 0.15rem 0.4rem;
   line-height: 1;
   display: none;
-  transition: color 0.3s;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: color 0.3s, opacity 120ms ease;
   user-select: none;
+  pointer-events: none;
 }
 
 .gem.visible {
   display: block;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .gem.active {
