@@ -214,11 +214,16 @@ Rules:
 - Exactly one complete sentence, ending with appropriate punctuation.
 - Maximum 25-30 words.
 - Match the tense, POV, and tone of the preceding text.
-- Obey the story intent.
 - Avoid clichés, exposition dumps, meta commentary, and summarizing.
 - The sentence must feel like a natural next beat in the story.
-- Never explain yourself. Never add quotes or attribution to your output.`;
-
+- Never explain yourself. Never add quotes or attribution to your output.
+Story intent: The Story Intent may contain future planned events or outcomes.
+Do NOT prematurely realize events described in the Story Intent.
+First determine the current narrative state based solely on the manuscript text.
+Identify what has actually happened so far.
+Continue causally and temporally from that point.
+Use the Story Intent only as directional guidance for where the story should eventually move — not as events that have already occurred.
+Never introduce consequences before the manuscript has reached the event that causes them.`;
   if (mode === 'mid_sentence') {
     prompt += `\n\nMode: mid-sentence completion.
 - Continue from the exact in-progress sentence at the cursor.
@@ -234,7 +239,7 @@ Rules:
 - Prefer concrete action, decision, or sensory shift over abstract summary.`;
   }
 
-  if (storyIntent) prompt += `\n\nStory intent (private, for context only): ${storyIntent}`;
+  if (storyIntent) prompt += `\n\nStory intent: ${storyIntent}`;
   return prompt;
 }
 

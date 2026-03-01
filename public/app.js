@@ -324,7 +324,7 @@
         if (line.firstChild && line.firstChild.nodeType === Node.TEXT_NODE) {
           range.setStart(line.firstChild, Math.min(remaining, lineText.length));
         } else {
-          range.setStart(line, 0);
+          range.setStart(line, line.childNodes.length);
         }
         range.collapse(true);
         selection.removeAllRanges();
@@ -360,7 +360,7 @@
             offset: Math.min(remaining, lineText.length),
           };
         }
-        return { container: line, offset: 0 };
+        return { container: line, offset: line.childNodes.length };
       }
       remaining -= lineText.length;
       if (remaining > 0) remaining -= 1;
