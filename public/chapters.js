@@ -10,8 +10,18 @@
   const DIVIDER_STYLES = ['*', '---', '-*-'];
   const DIVIDER_SET = new Set(DIVIDER_STYLES);
 
+  // Normalize Unicode dashes so iOS (and others) can type chapter dividers:
+  // – (U+2013 en dash) + hyphen(s) => ---,  — (U+2014 em dash) => ---
+  function normalizeDividerLine(line) {
+    if (line == null) return '';
+    let s = (line + '').trim();
+    s = s.replace(/\u2013-+/g, '---');  // en dash + one or more hyphens
+    s = s.replace(/\u2014/g, '---');    // em dash
+    return s;
+  }
+
   function isDividerLine(line) {
-    return DIVIDER_SET.has((line || '').trim());
+    return DIVIDER_SET.has(normalizeDividerLine(line));
   }
 
   function splitLinesWithOffsets(text) {
@@ -99,9 +109,9 @@
         dividerStyle: pendingDividerStyle || undefined,
       });
 
-      let dividerStyle = lines[i].trimmed;
+      let dividerStyle = normalizeDividerLine(lines[i].text);
       while (i < lines.length && isDividerLine(lines[i].text)) {
-        dividerStyle = lines[i].trimmed;
+        dividerStyle = normalizeDividerLine(lines[i].text);
         i += 1;
       }
 
