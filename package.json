@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "admin": "node admin.js",
+    "managedb": "node managedb.js",
     "test": "node --test"
   },
   "dependencies": {
