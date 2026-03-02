@@ -993,10 +993,11 @@
     const lineEndRaw = text.indexOf('\n', cursorOffset);
     const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw;
     const lineText = text.slice(lineStart, lineEnd);
-    const lastPeriod = lineText.lastIndexOf('.');
+    const lineTrimmedEnd = lineText.trimEnd();
+    const endsWithTerminalPunctuation = /[.!?:]["')\]]?$/u.test(lineTrimmedEnd);
 
-    const insertPos = lastPeriod >= 0 ? lineStart + lastPeriod + 1 : lineEnd;
-    const prefix = lastPeriod >= 0 ? ' ' : '. ';
+    const insertPos = lineEnd;
+    const prefix = endsWithTerminalPunctuation ? ' ' : '. ';
     const updatedText = text.slice(0, insertPos) + prefix + sentence + text.slice(insertPos);
     const newCursor = insertPos + prefix.length + sentence.length;
 
