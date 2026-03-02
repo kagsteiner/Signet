@@ -1073,13 +1073,19 @@
 
     const fullText = getEditorText();
     const selectedRaw = fullText.slice(offsets.start, offsets.end);
-    if (selectedRaw.trim().length < 3) {
+    const leadingWhitespace = (selectedRaw.match(/^\s*/) || [''])[0].length;
+    const trailingWhitespace = (selectedRaw.match(/\s*$/) || [''])[0].length;
+    const trimmedStart = offsets.start + leadingWhitespace;
+    const trimmedEnd = offsets.end - trailingWhitespace;
+    const trimmedSelection = fullText.slice(trimmedStart, trimmedEnd);
+
+    if (trimmedSelection.length < 3) {
       hideRewriteOverlay();
       return;
     }
 
-    selectedTextForRewrite = selectedRaw;
-    selectedRangeForRewrite = offsets;
+    selectedTextForRewrite = trimmedSelection;
+    selectedRangeForRewrite = { start: trimmedStart, end: trimmedEnd };
 
     showRewriteOverlay();
   }
