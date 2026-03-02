@@ -9,6 +9,7 @@
 
   const DIVIDER_STYLES = ['*', '---', '-*-'];
   const DIVIDER_SET = new Set(DIVIDER_STYLES);
+  const FIRST_CHAPTER_TITLE_MAX_LENGTH = 80;
 
   // Normalize Unicode dashes so iOS (and others) can type chapter dividers:
   // – (U+2013 en dash) + hyphen(s) => ---,  — (U+2014 em dash) => ---
@@ -87,6 +88,26 @@
     return `ch_${index + 1}_${hashString(signature)}`;
   }
 
+  function inferFirstChapterTitle(lines, chapter) {
+    if (!chapter || chapter.startOffset !== 0 || chapter.dividerStyle) return undefined;
+    if (!Array.isArray(lines) || lines.length < 2) return undefined;
+
+    const firstLine = lines[0];
+    if (!firstLine) return undefined;
+    if (firstLine.trimmed === '') return undefined;
+    if (firstLine.startOffset < chapter.startOffset || firstLine.startOffset >= chapter.endOffset) return undefined;
+    // Require at least one additional line in this chapter to reduce false positives
+    // on one-line manuscripts.
+    if (lines[1].startOffset >= chapter.endOffset) return undefined;
+    if (firstLine.trimmed.length > FIRST_CHAPTER_TITLE_MAX_LENGTH) return undefined;
+
+    return {
+      text: firstLine.trimmed,
+      startOffset: firstLine.startOffset,
+      endOffset: firstLine.endOffset,
+    };
+  }
+
   function parseChapters(manuscriptText) {
     const text = typeof manuscriptText === 'string' ? manuscriptText : '';
     const lines = splitLinesWithOffsets(text);
@@ -131,7 +152,7 @@
 
     for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex += 1) {
       const chapter = chapters[chapterIndex];
-      let title;
+      let title = inferFirstChapterTitle(lines, chapter);
 
       if (chapter.dividerStyle) {
         for (const line of lines) {

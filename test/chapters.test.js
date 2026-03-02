@@ -68,3 +68,37 @@ test('stable chapter ids survive text reflow before chapter', () => {
 
   assert.equal(baseChapters[1].id, editedChapters[1].id);
 });
+
+test('infers first chapter title from short opening line and blank line', () => {
+  const input = 'Prologue\n\nThe room was dark.';
+  const parsed = parseChapters(input);
+
+  assert.equal(parsed.length, 1);
+  assert.ok(parsed[0].title);
+  assert.equal(parsed[0].title.text, 'Prologue');
+});
+
+test('does not infer first chapter title when opening line is too long', () => {
+  const input = 'This opening line is intentionally made very long so it should not be treated as a chapter heading at all.\n\nBody';
+  const parsed = parseChapters(input);
+
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].title, undefined);
+});
+
+test('infers first chapter title with a single newline after opening line', () => {
+  const input = 'Prologue\nBody';
+  const parsed = parseChapters(input);
+
+  assert.equal(parsed.length, 1);
+  assert.ok(parsed[0].title);
+  assert.equal(parsed[0].title.text, 'Prologue');
+});
+
+test('does not infer first chapter title for one-line manuscript', () => {
+  const input = 'Prologue';
+  const parsed = parseChapters(input);
+
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].title, undefined);
+});
