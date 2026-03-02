@@ -180,13 +180,19 @@ app.post('/api/continue', requireAuth, async (req, res) => {
 // --- AI Rewrite ---
 app.post('/api/rewrite', requireAuth, async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
-  const { selectedText, instruction, fullText, selectionStart, selectionEnd } = req.body;
+  const { selectedText, instruction, fullText, selectionStart, selectionEnd, storyIntent } = req.body;
   if (!selectedText || !instruction) return res.status(400).json({ error: 'Missing text or instruction' });
 
   try {
     const selectedHasOuterQuotes = hasOuterMatchingQuotes(selectedText);
     const rewriteContext = buildRewriteContext(fullText, selectionStart, selectionEnd, selectedText);
-    const result = await callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes);
+    const result = await callRewrite(
+      selectedText,
+      instruction,
+      rewriteContext,
+      selectedHasOuterQuotes,
+      storyIntent
+    );
     res.json({ rewritten: result });
   } catch (err) {
     console.error('Rewrite error:', err);
@@ -317,46 +323,49 @@ function buildRewriteContext(fullText, startRaw, endRaw, selectedText) {
   if (safeStart === safeEnd) return null;
   if (fullText.slice(safeStart, safeEnd) !== selectedText) return null;
 
-  const breakRegex = /\n\s*\n/g;
-  const paragraphs = [];
-  let paraStart = 0;
-  let match = breakRegex.exec(fullText);
-  while (match) {
-    paragraphs.push({ start: paraStart, end: match.index });
-    paraStart = match.index + match[0].length;
-    match = breakRegex.exec(fullText);
-  }
-  paragraphs.push({ start: paraStart, end: fullText.length });
+  const chapterList = chapters.parseChapters(fullText);
+  const containingChapter = chapters.getChapterAtOffset(chapterList, safeStart);
+  if (!containingChapter) return null;
 
-  const overlapping = paragraphs.filter((paragraph) => paragraph.end > safeStart && paragraph.start < safeEnd);
-  if (overlapping.length === 0) return null;
+  const contextStart = containingChapter.startOffset;
+  const contextEnd = containingChapter.endOffset;
+  if (safeStart < contextStart || safeEnd > contextEnd) return null;
 
-  const contextStart = overlapping[0].start;
-  const contextEnd = overlapping[overlapping.length - 1].end;
   const contextText = fullText.slice(contextStart, contextEnd);
   const relStart = safeStart - contextStart;
   const relEnd = safeEnd - contextStart;
   const marked =
     contextText.slice(0, relStart) +
-    '[[selection]]' +
+    '<replace>' +
     contextText.slice(relStart, relEnd) +
-    '[[/selection]]' +
+    '</replace>' +
     contextText.slice(relEnd);
 
   return {
-    contextParagraphsWithSelection: marked,
+    contextChapterWithSelection: marked,
+    chapterTitle: containingChapter.title && containingChapter.title.text
+      ? containingChapter.title.text
+      : null,
     selectedText,
   };
 }
 
-async function callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes) {
+async function callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes, storyIntentRaw) {
   const OpenAI = require('openai');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+  const storyIntent = typeof storyIntentRaw === 'string' ? storyIntentRaw.trim() : '';
   let userMsg = `Instruction: ${instruction}`;
-  if (rewriteContext && rewriteContext.contextParagraphsWithSelection) {
-    userMsg += `\n\nBelow are the full paragraph(s) containing the selected text. The selected span is marked with [[selection]]...[[/selection]].\n\n${rewriteContext.contextParagraphsWithSelection}`;
+  if (storyIntent) {
+    userMsg += `\n\nStory intent (directional guidance):\n${storyIntent}`;
+  }
+  if (rewriteContext && rewriteContext.contextChapterWithSelection) {
+    userMsg += `\n\nBelow is the full chapter containing the selected text.`;
+    if (rewriteContext.chapterTitle) {
+      userMsg += `\nChapter title: ${rewriteContext.chapterTitle}`;
+    }
+    userMsg += `\nThe selected span is wrapped with <replace>...</replace>.\n\n${rewriteContext.contextChapterWithSelection}`;
   } else {
-    userMsg += `\n\nSelected span:\n[[selection]]${selectedText}[[/selection]]`;
+    userMsg += `\n\nSelected span:\n<replace>${selectedText}</replace>`;
   }
   const response = await client.chat.completions.create({
     model: 'gpt-4o-mini',
@@ -365,9 +374,9 @@ async function callRewrite(selectedText, instruction, rewriteContext, selectedHa
         role: 'system',
         content: `You are a literary editor.
 Your task:
-1) Identify the exact text between [[selection]] and [[/selection]].
+1) Identify the exact text between <replace> and </replace>.
 2) Rewrite ONLY that selected text based on the instruction. Follow the instruction exactly.
-3) Keep it consistent with the paragraph context.
+3) Keep it consistent with the chapter context and story intent (if provided).
 
 Output rules:
 - Return ONLY the rewritten replacement text for the selected span.

@@ -1165,6 +1165,7 @@
           fullText: getFullEditorText(),
           selectionStart: selectedRangeForRewrite.start,
           selectionEnd: selectedRangeForRewrite.end,
+          storyIntent: storyIntentEl.value || null,
         }),
       });
 
