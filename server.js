@@ -5,10 +5,10 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const db = require('./db');
 const chapters = require('./public/chapters');
+const ai = require('./ai');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const chapterIndexCache = new Map();
 
 // Base path when behind a subpath (e.g. nginx at /signet/). From env, rewrite middleware, or X-Script-Name header.
@@ -163,13 +163,14 @@ app.get('/api/stories/:id/chapter-context', requireAuth, (req, res) => {
 
 // --- AI Continuation (The Gem) ---
 app.post('/api/continue', requireAuth, async (req, res) => {
-  if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
+  if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
   const { precedingText, followingText, storyIntent, mode } = req.body;
   if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
   try {
     const systemPrompt = buildContinuationPrompt(storyIntent, mode);
-    const result = await callOpenAI(systemPrompt, precedingText, followingText, mode);
+    const userContent = buildContinuationUserMessage(precedingText, followingText, mode);
+    const result = await ai.chat(systemPrompt, userContent);
     res.json({ sentence: result });
   } catch (err) {
     console.error('Continuation error:', err);
@@ -179,20 +180,18 @@ app.post('/api/continue', requireAuth, async (req, res) => {
 
 // --- AI Rewrite ---
 app.post('/api/rewrite', requireAuth, async (req, res) => {
-  if (!OPENAI_API_KEY) return res.status(500).json({ error: 'AI not configured' });
+  if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
   const { selectedText, instruction, fullText, selectionStart, selectionEnd, storyIntent } = req.body;
   if (!selectedText || !instruction) return res.status(400).json({ error: 'Missing text or instruction' });
 
   try {
     const selectedHasOuterQuotes = hasOuterMatchingQuotes(selectedText);
     const rewriteContext = buildRewriteContext(fullText, selectionStart, selectionEnd, selectedText);
-    const result = await callRewrite(
-      selectedText,
-      instruction,
-      rewriteContext,
-      selectedHasOuterQuotes,
-      storyIntent
+    const { systemPrompt, userMessage } = buildRewriteMessages(
+      selectedText, instruction, rewriteContext, storyIntent
     );
+    const raw = await ai.chat(systemPrompt, userMessage);
+    const result = normalizeRewriteResult(raw, selectedHasOuterQuotes);
     res.json({ rewritten: result });
   } catch (err) {
     console.error('Rewrite error:', err);
@@ -249,24 +248,15 @@ Never introduce consequences before the manuscript has reached the event that ca
   return prompt;
 }
 
-async function callOpenAI(systemPrompt, precedingText, followingText, modeRaw) {
-  const OpenAI = require('openai');
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+function buildContinuationUserMessage(precedingText, followingText, modeRaw) {
   const mode = typeof modeRaw === 'string' ? modeRaw : 'default';
-  let userContent = `Continue this text with exactly one sentence:\n\n${precedingText}`;
   if (mode === 'mid_sentence') {
-    userContent = `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite the exact continuation text to insert at the cursor.`;
-  } else if (mode === 'paragraph_start') {
-    userContent = `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite one opening sentence for the new paragraph at the cursor.`;
+    return `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite the exact continuation text to insert at the cursor.`;
   }
-  const response = await client.chat.completions.create({
-    model: 'gpt-5.2',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userContent },
-    ]
-  });
-  return response.choices[0].message.content.trim();
+  if (mode === 'paragraph_start') {
+    return `Text before cursor:\n${precedingText}\n\nText after cursor (may be empty):\n${followingText || ''}\n\nWrite one opening sentence for the new paragraph at the cursor.`;
+  }
+  return `Continue this text with exactly one sentence:\n\n${precedingText}`;
 }
 
 function hasOuterMatchingQuotes(text) {
@@ -350,29 +340,9 @@ function buildRewriteContext(fullText, startRaw, endRaw, selectedText) {
   };
 }
 
-async function callRewrite(selectedText, instruction, rewriteContext, selectedHasOuterQuotes, storyIntentRaw) {
-  const OpenAI = require('openai');
-  const client = new OpenAI({ apiKey: OPENAI_API_KEY });
+function buildRewriteMessages(selectedText, instruction, rewriteContext, storyIntentRaw) {
   const storyIntent = typeof storyIntentRaw === 'string' ? storyIntentRaw.trim() : '';
-  let userMsg = `Instruction: ${instruction}`;
-  if (storyIntent) {
-    userMsg += `\n\nStory intent (directional guidance):\n${storyIntent}`;
-  }
-  if (rewriteContext && rewriteContext.contextChapterWithSelection) {
-    userMsg += `\n\nBelow is the full chapter containing the selected text.`;
-    if (rewriteContext.chapterTitle) {
-      userMsg += `\nChapter title: ${rewriteContext.chapterTitle}`;
-    }
-    userMsg += `\nThe selected span is wrapped with <replace>...</replace>.\n\n${rewriteContext.contextChapterWithSelection}`;
-  } else {
-    userMsg += `\n\nSelected span:\n<replace>${selectedText}</replace>`;
-  }
-  const response = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: `You are a literary editor.
+  const systemPrompt = `You are a literary editor.
 Your task:
 1) Identify the exact text between <replace> and </replace>.
 2) Rewrite ONLY that selected text based on the instruction. Follow the instruction exactly.
@@ -382,15 +352,22 @@ Output rules:
 - Return ONLY the rewritten replacement text for the selected span.
 - Do NOT return full paragraphs, markers, labels, or explanations.
 - Do NOT add surrounding quotation marks unless the original selected text is itself surrounded by matching quotation marks.
-- Do not include backticks.`,
-      },
-      { role: 'user', content: userMsg },
-    ],
-    max_tokens: 200,
-    temperature: 0.7,
-  });
-  const raw = response.choices[0].message.content || '';
-  return normalizeRewriteResult(raw, selectedHasOuterQuotes);
+- Do not include backticks.`;
+
+  let userMessage = `Instruction: ${instruction}`;
+  if (storyIntent) {
+    userMessage += `\n\nStory intent (directional guidance):\n${storyIntent}`;
+  }
+  if (rewriteContext && rewriteContext.contextChapterWithSelection) {
+    userMessage += `\n\nBelow is the full chapter containing the selected text.`;
+    if (rewriteContext.chapterTitle) {
+      userMessage += `\nChapter title: ${rewriteContext.chapterTitle}`;
+    }
+    userMessage += `\nThe selected span is wrapped with <replace>...</replace>.\n\n${rewriteContext.contextChapterWithSelection}`;
+  } else {
+    userMessage += `\n\nSelected span:\n<replace>${selectedText}</replace>`;
+  }
+  return { systemPrompt, userMessage };
 }
 
 function renderErrorPage(message) {
