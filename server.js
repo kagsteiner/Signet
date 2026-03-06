@@ -72,6 +72,7 @@ function requireAuth(req, res, next) {
   }
   req.userId = session.user_id;
   req.sessionId = session.id;
+  req.userTier = db.getUserTier(session.user_id);
   next();
 }
 
@@ -171,7 +172,7 @@ app.post('/api/continue', requireAuth, async (req, res) => {
   try {
     const systemPrompt = prompts.buildContinuationPrompt(storyIntent, mode);
     const userContent = prompts.buildContinuationUserMessage(precedingText, followingText, mode);
-    const result = await ai.chat(systemPrompt, userContent);
+    const result = await ai.chat(systemPrompt, userContent, req.userTier, req.userId);
     res.json({ sentence: result });
   } catch (err) {
     console.error('Continuation error:', err);
@@ -191,7 +192,7 @@ app.post('/api/rewrite', requireAuth, async (req, res) => {
     const { systemPrompt, userMessage } = buildRewriteMessages(
       selectedText, instruction, rewriteContext, storyIntent
     );
-    const raw = await ai.chat(systemPrompt, userMessage);
+    const raw = await ai.chat(systemPrompt, userMessage, req.userTier, req.userId);
     const result = normalizeRewriteResult(raw, selectedHasOuterQuotes);
     res.json({ rewritten: result });
   } catch (err) {

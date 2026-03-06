@@ -4,6 +4,9 @@ const crypto = require('crypto');
 
 const DB_PATH = path.join(__dirname, 'storytellers.db');
 
+const VALID_TIERS = ['common', 'bronze', 'silver', 'gold', 'platinum'];
+const DEFAULT_TIER = 'common';
+
 let db;
 
 function getDb() {
@@ -53,11 +56,17 @@ function initSchema() {
       ON sessions(user_id);
   `);
 
-  // Lightweight migration for existing installs.
+  // Lightweight migrations for existing installs.
   const storyColumns = db.prepare('PRAGMA table_info(stories)').all();
   const hasAuthor = storyColumns.some((column) => column.name === 'author');
   if (!hasAuthor) {
     db.exec('ALTER TABLE stories ADD COLUMN author TEXT');
+  }
+
+  const userColumns = db.prepare('PRAGMA table_info(users)').all();
+  const hasTier = userColumns.some((column) => column.name === 'tier');
+  if (!hasTier) {
+    db.exec(`ALTER TABLE users ADD COLUMN tier TEXT NOT NULL DEFAULT '${DEFAULT_TIER}'`);
   }
 }
 
@@ -110,7 +119,7 @@ function createUser(name) {
   const id = generateId();
   const accessKey = generateAccessKey();
   const accessKeyHash = hashAccessKey(accessKey);
-  d.prepare('INSERT INTO users (id, name, access_key_hash, created_at) VALUES (?, ?, ?, ?)').run(id, name, accessKeyHash, now());
+  d.prepare('INSERT INTO users (id, name, access_key_hash, tier, created_at) VALUES (?, ?, ?, ?, ?)').run(id, name, accessKeyHash, DEFAULT_TIER, now());
   return { id, name, accessKey };
 }
 
@@ -128,7 +137,22 @@ function regenerateAccessKey(userId) {
 }
 
 function listUsers() {
-  return getDb().prepare('SELECT id, name, created_at FROM users ORDER BY created_at DESC').all();
+  return getDb().prepare('SELECT id, name, tier, created_at FROM users ORDER BY created_at DESC').all();
+}
+
+function getUserTier(userId) {
+  const row = getDb().prepare('SELECT tier FROM users WHERE id = ?').get(userId);
+  return row ? row.tier : DEFAULT_TIER;
+}
+
+function setUserTier(userId, tier) {
+  if (!VALID_TIERS.includes(tier)) {
+    throw new Error(`Invalid tier "${tier}". Valid tiers: ${VALID_TIERS.join(', ')}`);
+  }
+  const result = getDb().prepare('UPDATE users SET tier = ? WHERE id = ?').run(tier, userId);
+  if (result.changes === 0) {
+    throw new Error(`User not found: ${userId}`);
+  }
 }
 
 // --- Session operations ---
@@ -208,6 +232,10 @@ module.exports = {
   findUserByAccessKeyHash,
   regenerateAccessKey,
   listUsers,
+  getUserTier,
+  setUserTier,
+  VALID_TIERS,
+  DEFAULT_TIER,
   createSession,
   findValidSession,
   deleteSession,

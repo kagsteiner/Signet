@@ -11,15 +11,20 @@ const startText = fs.readFileSync(startFile, 'utf8').trim();
 const storyIntent = fs.existsSync(intentFile) ? fs.readFileSync(intentFile, 'utf8').trim() : '';
 
 require('dotenv').config({ override: true });
-process.env.AI_PROVIDER = provider;
 
 const ai = require('./ai');
 const prompts = require('./prompts');
 
+const providerConfig = ai.providers[provider];
+if (!providerConfig) {
+  console.error(`Unknown provider "${provider}". Valid: ${Object.keys(ai.providers).join(', ')}`);
+  process.exit(1);
+}
+
 const ITERATIONS = 10;
 
 async function run() {
-  console.log(`Provider: ${ai.PROVIDER}  Model: ${ai.model}`);
+  console.log(`Provider: ${provider}  Model: ${providerConfig.model}`);
   console.log(`Story intent: ${storyIntent || '(none)'}`);
   console.log(`Start text:\n${startText}\n`);
 
@@ -28,7 +33,7 @@ async function run() {
 
   for (let i = 1; i <= ITERATIONS; i++) {
     const userMessage = prompts.buildContinuationUserMessage(text, null, 'default');
-    const sentence = await ai.chat(systemPrompt, userMessage);
+    const sentence = await ai.chatWithProvider(systemPrompt, userMessage, provider);
     text += ' ' + sentence;
     console.log(`[${i}/${ITERATIONS}] ${sentence}`);
   }

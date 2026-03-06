@@ -1,26 +1,40 @@
-const PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+let logLlm = process.env.LOG_LLM !== '0';
 
 const providers = {
-  openai:    { model: 'gpt-5.4',             envKey: 'OPENAI_API_KEY' },
-  anthropic: { model: 'claude-sonnet-4-6', envKey: 'ANTHROPIC_API_KEY' },
-  deepseek:  { model: 'deepseek-chat',            envKey: 'DEEPSEEK_API_KEY',  baseURL: 'https://api.deepseek.com' },
-  mistral:   { model: 'mistral-large-latest',     envKey: 'MISTRAL_API_KEY',   baseURL: 'https://api.mistral.ai/v1' },
+  deepseek:  { model: 'deepseek-chat',        envKey: 'DEEPSEEK_API_KEY',  baseURL: 'https://api.deepseek.com' },
+  anthropic: { model: 'claude-sonnet-4-6',   envKey: 'ANTHROPIC_API_KEY' },
+  openai:    { model: 'gpt-5.4',              envKey: 'OPENAI_API_KEY' },
+  mistral:   { model: 'mistral-large-latest',  envKey: 'MISTRAL_API_KEY',   baseURL: 'https://api.mistral.ai/v1' },
 };
 
-const config = providers[PROVIDER];
-if (!config) {
-  throw new Error(`Unknown AI_PROVIDER "${PROVIDER}". Valid: ${Object.keys(providers).join(', ')}`);
+const tierToProvider = {
+  common: 'deepseek',
+  bronze: 'deepseek',
+  silver: 'deepseek',
+  gold:   'anthropic',
+  platinum: 'anthropic',
+};
+
+function getProviderForTier(tier) {
+  return tierToProvider[tier] || tierToProvider.common;
 }
 
-const apiKey = process.env[config.envKey] || '';
-
-async function chat(systemPrompt, userMessage) {
-  if (!apiKey) throw new Error(`${config.envKey} is not set`);
-  if (PROVIDER === 'anthropic') return anthropicChat(systemPrompt, userMessage);
-  return openaiChat(systemPrompt, userMessage);
+function getApiKey(providerName) {
+  const cfg = providers[providerName];
+  return cfg ? (process.env[cfg.envKey] || '') : '';
 }
 
-async function openaiChat(systemPrompt, userMessage) {
+async function chat(systemPrompt, userMessage, tier, user) {
+  const providerName = getProviderForTier(tier);
+  const config = providers[providerName];
+  const apiKey = getApiKey(providerName);
+  if (!apiKey) throw new Error(`${config.envKey} is not set (needed for tier "${tier}")`);
+  if (logLlm) console.log(`[LLM] user=${user || '?'} tier=${tier} provider=${providerName} model=${config.model}`);
+  if (providerName === 'anthropic') return anthropicChat(config, apiKey, systemPrompt, userMessage);
+  return openaiChat(config, apiKey, systemPrompt, userMessage);
+}
+
+async function openaiChat(config, apiKey, systemPrompt, userMessage) {
   const OpenAI = require('openai');
   const client = new OpenAI({
     apiKey,
@@ -36,7 +50,7 @@ async function openaiChat(systemPrompt, userMessage) {
   return res.choices[0].message.content.trim();
 }
 
-async function anthropicChat(systemPrompt, userMessage) {
+async function anthropicChat(config, apiKey, systemPrompt, userMessage) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const res = await client.messages.create({
@@ -48,4 +62,18 @@ async function anthropicChat(systemPrompt, userMessage) {
   return res.content[0].text.trim();
 }
 
-module.exports = { chat, configured: Boolean(apiKey), PROVIDER, model: config.model };
+async function chatWithProvider(systemPrompt, userMessage, providerName, user) {
+  const config = providers[providerName];
+  if (!config) throw new Error(`Unknown provider "${providerName}". Valid: ${Object.keys(providers).join(', ')}`);
+  const apiKey = getApiKey(providerName);
+  if (!apiKey) throw new Error(`${config.envKey} is not set`);
+  if (logLlm) console.log(`[LLM] user=${user || '?'} tier=- provider=${providerName} model=${config.model}`);
+  if (providerName === 'anthropic') return anthropicChat(config, apiKey, systemPrompt, userMessage);
+  return openaiChat(config, apiKey, systemPrompt, userMessage);
+}
+
+const configured = Boolean(getApiKey('deepseek')) || Boolean(getApiKey('anthropic'));
+
+function setLogLlm(enabled) { logLlm = enabled; }
+
+module.exports = { chat, chatWithProvider, configured, providers, tierToProvider, getProviderForTier, setLogLlm };

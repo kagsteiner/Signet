@@ -40,7 +40,7 @@ switch (command) {
       console.log('\nUsers:');
       for (const u of users) {
         const date = new Date(u.created_at).toISOString().slice(0, 10);
-        console.log(`  ${u.name}  (${u.id})  created ${date}`);
+        console.log(`  ${u.name}  [${u.tier}]  (${u.id})  created ${date}`);
       }
       console.log('');
     }
