@@ -1,12 +1,10 @@
-require('dotenv').config({ override: true });
-
 const PROVIDER = (process.env.AI_PROVIDER || 'openai').toLowerCase();
 
 const providers = {
-  openai:    { model: 'gpt-4o-mini',             envKey: 'OPENAI_API_KEY' },
-  anthropic: { model: 'claude-sonnet-4-20250514', envKey: 'ANTHROPIC_API_KEY' },
+  openai:    { model: 'gpt-5.4',             envKey: 'OPENAI_API_KEY' },
+  anthropic: { model: 'claude-sonnet-4-6', envKey: 'ANTHROPIC_API_KEY' },
   deepseek:  { model: 'deepseek-chat',            envKey: 'DEEPSEEK_API_KEY',  baseURL: 'https://api.deepseek.com' },
-  mistral:   { model: 'mistral-small-latest',     envKey: 'MISTRAL_API_KEY',   baseURL: 'https://api.mistral.ai/v1' },
+  mistral:   { model: 'mistral-large-latest',     envKey: 'MISTRAL_API_KEY',   baseURL: 'https://api.mistral.ai/v1' },
 };
 
 const config = providers[PROVIDER];
