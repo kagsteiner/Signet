@@ -1319,6 +1319,7 @@
   editor.addEventListener('input', () => {
     const cursorOffset = getCursorOffset();
     const text = getEditorText();
+    const previousScrollY = window.scrollY;
     if (!isApplyingHistory && pendingBeforeInputSnapshot && pendingBeforeInputSnapshot.text !== text) {
       pushSnapshot(undoStack, pendingBeforeInputSnapshot);
       redoStack = [];
@@ -1330,6 +1331,9 @@
     scheduleSave();
     updateGemVisibility({ typing: true });
     ensureCursorBottomPadding();
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: previousScrollY, left: 0, behavior: 'auto' });
+    });
   });
 
   editor.addEventListener('keyup', () => {
