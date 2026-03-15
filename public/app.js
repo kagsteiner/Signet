@@ -192,14 +192,18 @@
     return Array.from(editor.querySelectorAll('.editor-line'));
   }
 
+  function normalizePlainText(value) {
+    return typeof value === 'string' ? value.replace(/\u00A0/g, ' ') : '';
+  }
+
   function getLineRawText(line) {
     if (!line) return '';
-    return line.textContent || '';
+    return normalizePlainText(line.textContent || '');
   }
 
   function getEditorText() {
     const lines = getLineElements();
-    if (lines.length === 0) return editor.textContent || '';
+    if (lines.length === 0) return normalizePlainText(editor.textContent || '');
     return lines.map((line) => getLineRawText(line)).join('\n');
   }
 
@@ -389,6 +393,13 @@
     ensureCursorBottomPadding();
   }
 
+  function focusEditorAtOffset(offset) {
+    if (!editor) return;
+    editor.focus({ preventScroll: true });
+    setCursorOffset(offset);
+    ensureCursorBottomPadding();
+  }
+
   function getEditorLineHeightPx() {
     const style = window.getComputedStyle(editor);
     const parsedLineHeight = parseFloat(style.lineHeight);
@@ -511,7 +522,7 @@
   }
 
   function normalizeMetadataText(value) {
-    return typeof value === 'string' ? value.trim() : '';
+    return normalizePlainText(value).trim();
   }
 
   function truncateWithEllipsis(text, maxLength) {
@@ -572,7 +583,10 @@
   function scheduleSave() {
     if (saveTimer) clearTimeout(saveTimer);
     saveIndicator.textContent = '';
-    saveTimer = setTimeout(() => saveContent(), 1500);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      saveContent();
+    }, 1500);
   }
 
   async function saveContent() {
@@ -600,7 +614,10 @@
 
   function scheduleIntentSave() {
     if (intentSaveTimer) clearTimeout(intentSaveTimer);
-    intentSaveTimer = setTimeout(() => saveIntents(), 1500);
+    intentSaveTimer = setTimeout(() => {
+      intentSaveTimer = null;
+      saveIntents();
+    }, 1500);
   }
 
   async function saveIntents() {
@@ -618,7 +635,10 @@
   // --- Story metadata ---
   function scheduleMetadataSave() {
     if (metadataSaveTimer) clearTimeout(metadataSaveTimer);
-    metadataSaveTimer = setTimeout(() => saveMetadata(), 900);
+    metadataSaveTimer = setTimeout(() => {
+      metadataSaveTimer = null;
+      saveMetadata();
+    }, 900);
   }
 
   async function saveMetadata() {
@@ -941,6 +961,9 @@
     const source = options.source || 'gem';
     const text = getEditorText();
     const cursorOffset = getCursorOffset();
+    const stableInsertOffset = source === 'shortcut'
+      ? cursorOffset
+      : text.replace(/\s+$/u, '').length;
     const mode = options.mode || (source === 'shortcut' ? detectContinuationModeAtCursor() : 'default');
     const beforeCursor = text.slice(0, cursorOffset);
     const afterCursor = text.slice(cursorOffset);
@@ -971,9 +994,9 @@
 
       if (result && result.sentence) {
         if (source === 'shortcut') {
-          insertContinuationAtCursor(result.sentence);
+          insertContinuationAtCursor(result.sentence, { cursorOffset: stableInsertOffset });
         } else {
-          insertContinuation(result.sentence);
+          insertContinuation(result.sentence, { cursorOffset: stableInsertOffset });
         }
       }
     } catch {
@@ -985,10 +1008,12 @@
     updateGemVisibility();
   }
 
-  function insertContinuation(sentence) {
+  function insertContinuation(sentence, options = {}) {
     recordBeforeProgrammaticTextChange();
     const text = getEditorText();
-    const cursorOffset = getCursorOffset();
+    const cursorOffset = typeof options.cursorOffset === 'number'
+      ? Math.max(0, Math.min(options.cursorOffset, text.length))
+      : getCursorOffset();
     const lineStart = text.lastIndexOf('\n', Math.max(0, cursorOffset - 1)) + 1;
     const lineEndRaw = text.indexOf('\n', cursorOffset);
     const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw;
@@ -1002,21 +1027,25 @@
     const newCursor = insertPos + prefix.length + sentence.length;
 
     renderEditorText(updatedText, { cursorOffset: newCursor });
+    focusEditorAtOffset(newCursor);
     lastKnownEditorText = updatedText;
     scheduleSave();
   }
 
-  function insertContinuationAtCursor(rawText) {
+  function insertContinuationAtCursor(rawText, options = {}) {
     const continuation = (rawText || '').trim();
     if (!continuation) return;
 
     recordBeforeProgrammaticTextChange();
     const text = getEditorText();
-    const cursorOffset = getCursorOffset();
+    const cursorOffset = typeof options.cursorOffset === 'number'
+      ? Math.max(0, Math.min(options.cursorOffset, text.length))
+      : getCursorOffset();
     const updatedText = text.slice(0, cursorOffset) + continuation + text.slice(cursorOffset);
     const newCursor = cursorOffset + continuation.length;
 
     renderEditorText(updatedText, { cursorOffset: newCursor });
+    focusEditorAtOffset(newCursor);
     lastKnownEditorText = updatedText;
     scheduleSave();
   }
