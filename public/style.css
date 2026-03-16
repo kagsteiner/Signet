@@ -203,6 +203,7 @@ body {
 
 #editor .editor-line {
   margin-bottom: 0.5em;
+  white-space: pre-wrap;
 }
 
 #editor .editor-line.chapter-jump-highlight {
