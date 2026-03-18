@@ -1,0 +1,27 @@
+---
+description: Run Signet test suites after changes; keep green
+alwaysApply: true
+---
+
+# Signet: testing workflow (required)
+
+## After any non-trivial change
+
+- Run the fast suite: `npm test`
+- If the change touches server routing/DB/auth/session logic: also run `npm test` (includes API integration tests)
+- If the change touches the editor UI (`public/`), selection/cursor math, undo/redo, clipboard, or chapter rendering: also run `npm run test:e2e`
+- Before finishing a task (or when unsure): run the full suite: `npm run test:all`
+
+## Fix-forward policy
+
+- If any test fails, **fix the root cause** (don’t weaken assertions unless the behavior is intentionally changing).
+- If an E2E test is flaky, stabilize it by:
+  - waiting on concrete UI signals (`toBeVisible`, `toHaveText`, `expect.poll` on DOM state)
+  - avoiding timing-based sleeps
+  - preferring stable selectors (`#id` and existing classnames in `public/app.html`)
+
+## Test architecture notes (project-specific)
+
+- Unit + API integration tests use Node’s built-in runner (`node --test`) under `test/`.
+- Browser regression tests use Playwright under `e2e/` (Chromium-first).
+- E2E artifacts are written to the OS temp directory (not the repo) to avoid OneDrive/Windows permission issues.
