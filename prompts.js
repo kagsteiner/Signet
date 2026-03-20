@@ -47,4 +47,58 @@ function buildContinuationUserMessage(precedingText, followingText, modeRaw) {
   return `Continue this text with exactly one sentence:\n\n${precedingText}`;
 }
 
-module.exports = { buildContinuationPrompt, buildContinuationUserMessage };
+function buildRecallPrompt(storyIntentRaw) {
+  const storyIntent = typeof storyIntentRaw === 'string' ? storyIntentRaw.trim() : '';
+  let prompt = `You are resurfacing narrative memory from a manuscript.
+
+Your task:
+- Determine what the selected word refers to within the manuscript context.
+- Return a very short reminder of its narrative meaning.
+- Base your answer strictly on the manuscript.
+- Do not invent missing information.
+
+Output rules:
+- Plain text only.
+- Maximum 3 short lines.
+- No bullet points or numbered lists.
+- No labels, headings, or category words like "Character" or "Location".
+- No meta commentary, analysis, or uncertainty explanations.
+- Keep the tone calm, neutral, literary, and restrained.
+
+If the reference is unclear, return NOTHING.`;
+
+  if (storyIntent) {
+    prompt += `\n\nStory intent (directional guidance only, not established fact): ${storyIntent}`;
+  }
+
+  return prompt;
+}
+
+function buildRecallUserMessage(selectedText, recallContext) {
+  const target = typeof selectedText === 'string' ? selectedText.trim() : '';
+  let message = `Selected word: ${target}`;
+
+  if (recallContext && recallContext.contextChapterWithSelection) {
+    message += `\n\nBelow is the chapter containing the selected word. The selected word is wrapped with <recall>...</recall>.`;
+    if (recallContext.chapterTitle) {
+      message += `\nChapter title: ${recallContext.chapterTitle}`;
+    }
+    if (recallContext.previousChapterTitle) {
+      message += `\nPrevious chapter: ${recallContext.previousChapterTitle}`;
+    }
+    if (recallContext.nextChapterTitle) {
+      message += `\nNext chapter: ${recallContext.nextChapterTitle}`;
+    }
+    message += `\n\n${recallContext.contextChapterWithSelection}`;
+    return message;
+  }
+
+  return `${message}\n\nSelected word in manuscript:\n<recall>${target}</recall>`;
+}
+
+module.exports = {
+  buildContinuationPrompt,
+  buildContinuationUserMessage,
+  buildRecallPrompt,
+  buildRecallUserMessage,
+};

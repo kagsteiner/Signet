@@ -120,6 +120,68 @@ Output rules:
   return { systemPrompt, userMessage };
 }
 
+function buildRecallContext(fullText, startRaw, endRaw, selectedText) {
+  if (typeof fullText !== 'string') return null;
+  if (typeof selectedText !== 'string') return null;
+
+  const start = Number(startRaw);
+  const end = Number(endRaw);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+
+  const safeStart = Math.max(0, Math.min(start, end, fullText.length));
+  const safeEnd = Math.max(0, Math.min(Math.max(start, end), fullText.length));
+  if (safeStart === safeEnd) return null;
+  if (fullText.slice(safeStart, safeEnd) !== selectedText) return null;
+
+  const chapterList = chapters.parseChapters(fullText);
+  const containingChapter = chapters.getChapterAtOffset(chapterList, safeStart);
+  if (!containingChapter) return null;
+  if (safeStart < containingChapter.startOffset || safeEnd > containingChapter.endOffset) return null;
+
+  const chapterIndex = chapterList.findIndex((chapter) => chapter.id === containingChapter.id);
+  const contextText = fullText.slice(containingChapter.startOffset, containingChapter.endOffset).replace(/\s+$/u, '');
+  const relStart = safeStart - containingChapter.startOffset;
+  const relEnd = safeEnd - containingChapter.startOffset;
+  const marked =
+    contextText.slice(0, relStart) +
+    '<recall>' +
+    contextText.slice(relStart, relEnd) +
+    '</recall>' +
+    contextText.slice(relEnd);
+
+  return {
+    selectedText,
+    chapterTitle: containingChapter.title && containingChapter.title.text
+      ? containingChapter.title.text
+      : null,
+    previousChapterTitle: chapterIndex > 0 && chapterList[chapterIndex - 1].title
+      ? chapterList[chapterIndex - 1].title.text
+      : null,
+    nextChapterTitle: chapterIndex >= 0 && chapterIndex < chapterList.length - 1 && chapterList[chapterIndex + 1].title
+      ? chapterList[chapterIndex + 1].title.text
+      : null,
+    contextChapterWithSelection: marked,
+  };
+}
+
+function normalizeRecallResult(rawResult) {
+  if (typeof rawResult !== 'string') return '';
+  const trimmed = rawResult.trim();
+  if (!trimmed) return '';
+
+  const lines = trimmed
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0 || lines.length > 3) return '';
+  if (lines.some((line) => /^([-*•]|\d+\.)\s/u.test(line))) return '';
+
+  const normalized = lines.join('\n');
+  if (normalized.length > 280) return '';
+  return normalized;
+}
+
 module.exports = {
   getBasePath,
   hasOuterMatchingQuotes,
@@ -127,4 +189,6 @@ module.exports = {
   normalizeRewriteResult,
   buildRewriteContext,
   buildRewriteMessages,
+  buildRecallContext,
+  normalizeRecallResult,
 };

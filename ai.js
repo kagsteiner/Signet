@@ -4,6 +4,7 @@ const providers = {
   deepseek:  { model: 'deepseek-chat',        envKey: 'DEEPSEEK_API_KEY',  baseURL: 'https://api.deepseek.com' },
   anthropic: { model: 'claude-sonnet-4-6',   envKey: 'ANTHROPIC_API_KEY' },
   openai:    { model: 'gpt-5.4',              envKey: 'OPENAI_API_KEY' },
+  openaiMini: { model: 'gpt-5.4-mini',        envKey: 'OPENAI_API_KEY' },
   mistral:   { model: 'mistral-large-latest',  envKey: 'MISTRAL_API_KEY',   baseURL: 'https://api.mistral.ai/v1' },
 };
 
@@ -72,7 +73,7 @@ async function chatWithProvider(systemPrompt, userMessage, providerName, user) {
   return openaiChat(config, apiKey, systemPrompt, userMessage);
 }
 
-const configured = Boolean(getApiKey('deepseek')) || Boolean(getApiKey('anthropic'));
+const configured = Boolean(getApiKey('deepseek')) || Boolean(getApiKey('anthropic')) || Boolean(getApiKey('openai'));
 
 function setLogLlm(enabled) { logLlm = enabled; }
 

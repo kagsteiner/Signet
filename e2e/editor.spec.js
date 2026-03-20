@@ -14,7 +14,7 @@ async function launchStory(page, options = {}) {
     initialContent: options.initialContent || '',
   });
 
-  const server = await startTestServer({ db: fixture.db });
+  const server = await startTestServer({ db: fixture.db, ai: options.ai });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: server.origin });
   await page.context().addCookies([{
     name: 'session',
@@ -32,6 +32,85 @@ async function launchStory(page, options = {}) {
       fixture.cleanup();
     },
   };
+}
+
+async function doubleClickWord(page, word) {
+  const point = await page.evaluate((word) => {
+    const lines = Array.from(document.querySelectorAll('#editor .editor-line'));
+    for (const line of lines) {
+      const text = (line.textContent || '').replace(/\u00A0/g, ' ');
+      const index = text.indexOf(word);
+      if (index === -1 || !line.firstChild || line.firstChild.nodeType !== Node.TEXT_NODE) continue;
+
+      const range = document.createRange();
+      range.setStart(line.firstChild, index);
+      range.setEnd(line.firstChild, index + word.length);
+      const rect = range.getBoundingClientRect();
+      if (!rect || (!rect.width && !rect.height)) continue;
+      return {
+        x: rect.left + Math.max(2, rect.width / 2),
+        y: rect.top + Math.max(2, rect.height / 2),
+      };
+    }
+    return null;
+  }, word);
+
+  if (!point) throw new Error(`Could not find word: ${word}`);
+  await page.mouse.dblclick(point.x, point.y);
+}
+
+async function simulateTouchLongPressOnWord(page, word) {
+  await page.evaluate((word) => {
+    const editor = document.getElementById('editor');
+    const lines = Array.from(editor.querySelectorAll('.editor-line'));
+    for (const line of lines) {
+      const text = (line.textContent || '').replace(/\u00A0/g, ' ');
+      const index = text.indexOf(word);
+      if (index === -1 || !line.firstChild || line.firstChild.nodeType !== Node.TEXT_NODE) continue;
+
+      const range = document.createRange();
+      range.setStart(line.firstChild, index);
+      range.setEnd(line.firstChild, index + word.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      const rect = range.getBoundingClientRect();
+      editor.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerType: 'touch',
+        pointerId: 1,
+        isPrimary: true,
+        clientX: rect.left + 2,
+        clientY: rect.top + 2,
+      }));
+      window.setTimeout(() => {
+        editor.dispatchEvent(new PointerEvent('pointerup', {
+          bubbles: true,
+          pointerType: 'touch',
+          pointerId: 1,
+          isPrimary: true,
+          clientX: rect.left + 2,
+          clientY: rect.top + 2,
+        }));
+      }, 650);
+      return;
+    }
+    throw new Error(`Could not find word: ${word}`);
+  }, word);
+}
+
+async function recallAppearsWithin(page, timeoutMs) {
+  try {
+    await page.waitForFunction(
+      () => !document.getElementById('recall-overlay').classList.contains('hidden'),
+      null,
+      { timeout: timeoutMs }
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function getEditorText(page) {
@@ -268,12 +347,12 @@ test('redo restores text after undo', async ({ page }) => {
 test('selecting text creates a visible selection and clicking later collapses it', async ({ page }) => {
   const harness = await launchStory(page, { initialContent: 'Alpha beta gamma' });
   try {
-    await setSelectionOffsets(page, 6, 10);
+    await setSelectionOffsets(page, 6, 16);
     await expect(page.locator('#rewrite-overlay')).not.toHaveClass(/hidden/);
 
     const selected = await getSelectionState(page);
     expect(selected.collapsed).toBe(false);
-    expect(selected.text).toBe('beta');
+    expect(selected.text).toBe('beta gamma');
 
     await clickCaretAtOffset(page, 16);
     await expect.poll(() => getSelectionState(page)).toMatchObject({
@@ -281,6 +360,71 @@ test('selecting text creates a visible selection and clicking later collapses it
       start: 16,
       end: 16,
     });
+  } finally {
+    await harness.close();
+  }
+});
+
+test('double-clicking a single word shows recall without opening rewrite and typing dismisses it', async ({ page }) => {
+  const harness = await launchStory(page, {
+    initialContent: 'Alpha beta gamma',
+    ai: {
+      configured: true,
+      async chatWithProvider() {
+        return 'beta, the word set apart in the line.';
+      },
+    },
+  });
+  try {
+    await doubleClickWord(page, 'beta');
+
+    await expect(page.locator('#recall-overlay')).toContainText('beta, the word set apart in the line.');
+    await expect(page.locator('#rewrite-overlay')).toHaveClass(/hidden/);
+
+    await page.keyboard.type('x');
+    await expect(page.locator('#recall-overlay')).toHaveClass(/hidden/);
+  } finally {
+    await harness.close();
+  }
+});
+
+test('touch long-press on a single word can trigger recall', async ({ page }) => {
+  const harness = await launchStory(page, {
+    initialContent: 'Alpha beta gamma',
+    ai: {
+      configured: true,
+      async chatWithProvider() {
+        return 'beta, the word singled out and briefly remembered.';
+      },
+    },
+  });
+  try {
+    await simulateTouchLongPressOnWord(page, 'beta');
+
+    await expect(page.locator('#recall-overlay')).toContainText('beta, the word singled out and briefly remembered.');
+    await expect(page.locator('#rewrite-overlay')).toHaveClass(/hidden/);
+  } finally {
+    await harness.close();
+  }
+});
+
+test('slow recall results never appear after the timeout window', async ({ page }) => {
+  const harness = await launchStory(page, {
+    initialContent: 'Alpha beta gamma',
+    ai: {
+      configured: true,
+      async chatWithProvider() {
+        await new Promise((resolve) => setTimeout(resolve, 2300));
+        return 'This should never appear.';
+      },
+    },
+  });
+  try {
+    await doubleClickWord(page, 'beta');
+
+    expect(await recallAppearsWithin(page, 2200)).toBe(false);
+    expect(await recallAppearsWithin(page, 1200)).toBe(false);
+    await expect(page.locator('#recall-overlay')).toHaveClass(/hidden/);
   } finally {
     await harness.close();
   }

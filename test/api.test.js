@@ -158,3 +158,44 @@ test('rewrite endpoint normalizes quoted AI output', async (t) => {
   assert.equal(response.res.status, 200);
   assert.equal(response.json.rewritten, 'Quiet replacement.');
 });
+
+test('recall endpoint uses fast provider path and returns normalized recall', async (t) => {
+  const fixture = createTempDb();
+  const calls = [];
+  const ai = {
+    configured: true,
+    async chatWithProvider(systemPrompt, userMessage, providerName, userId) {
+      calls.push({ systemPrompt, userMessage, providerName, userId });
+      return ' John, the man keeping watch over the harbor. \n\n';
+    },
+  };
+  const server = await startTestServer({ db: fixture.db, ai });
+  const auth = createAuthState(fixture.db, 'Recall User');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const fullText = 'Opening\n\n---\nHarbor\nJohn watched the tide.';
+  const selectedText = 'John';
+  const start = fullText.indexOf(selectedText);
+  const end = start + selectedText.length;
+  const response = await requestJson(server.origin, '/api/recall', {
+    method: 'POST',
+    headers: { Cookie: auth.cookie },
+    body: {
+      fullText,
+      selectedText,
+      selectionStart: start,
+      selectionEnd: end,
+      storyIntent: 'Keep the note restrained.',
+    },
+  });
+
+  assert.equal(response.res.status, 200);
+  assert.equal(response.json.recall, 'John, the man keeping watch over the harbor.');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].providerName, 'openaiMini');
+  assert.match(calls[0].systemPrompt, /return NOTHING/);
+  assert.match(calls[0].userMessage, /<recall>John<\/recall>/);
+});

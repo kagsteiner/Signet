@@ -13,6 +13,8 @@ const {
   normalizeRewriteResult,
   buildRewriteContext,
   buildRewriteMessages,
+  buildRecallContext,
+  normalizeRecallResult,
 } = require('./server/app-helpers');
 
 function renderErrorPage(message) {
@@ -256,6 +258,36 @@ function createApp(options = {}) {
     } catch (err) {
       console.error('Rewrite error:', err);
       res.status(500).json({ error: 'Failed to rewrite' });
+    }
+  });
+
+  app.post('/api/recall', requireAuth, async (req, res) => {
+    if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
+    const {
+      selectedText,
+      fullText,
+      selectionStart,
+      selectionEnd,
+      storyIntent,
+    } = req.body;
+    if (!selectedText) return res.status(400).json({ error: 'Missing selected text' });
+
+    try {
+      const recallContext = buildRecallContext(fullText, selectionStart, selectionEnd, selectedText);
+      if (!recallContext) {
+        return res.status(400).json({ error: 'Invalid recall selection' });
+      }
+
+      const systemPrompt = prompts.buildRecallPrompt(storyIntent);
+      const userMessage = prompts.buildRecallUserMessage(selectedText, recallContext);
+      const rawResult = typeof ai.chatWithProvider === 'function'
+        ? await ai.chatWithProvider(systemPrompt, userMessage, 'openaiMini', req.userId)
+        : await ai.chat(systemPrompt, userMessage, req.userTier, req.userId);
+      const recall = normalizeRecallResult(rawResult);
+      res.json({ recall: recall || null });
+    } catch (err) {
+      console.error('Recall error:', err);
+      res.status(500).json({ error: 'Failed to generate recall' });
     }
   });
 

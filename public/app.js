@@ -34,6 +34,11 @@
   const CURSOR_BOTTOM_PADDING_LINES = 3;
   const GEM_IDLE_APPEAR_DELAY_MS = 1000;
   const GEM_END_OFFSET_PX = 8;
+  const RECALL_TIMEOUT_MS = 1700;
+  const RECALL_DISMISS_MS = 4200;
+  const RECALL_LONG_PRESS_DELAY_MS = 480;
+  const RECALL_TRIGGER_WINDOW_MS = 700;
+  const RECALL_SELECTION_MIN_LENGTH = 2;
 
   // --- DOM refs ---
   const titleBtn = document.getElementById('story-title-btn');
@@ -62,6 +67,8 @@
   const rewriteAccept = document.getElementById('rewrite-accept');
   const rewriteReject = document.getElementById('rewrite-reject');
   const gemHint = document.getElementById('gem-hint');
+  const recallPulse = document.getElementById('recall-pulse');
+  const recallOverlay = document.getElementById('recall-overlay');
 
   // --- API helpers ---
   async function api(url, opts = {}) {
@@ -519,6 +526,49 @@
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  function isSingleWordSelection(text) {
+    const trimmed = normalizePlainText(text).trim();
+    if (!trimmed || /\s/u.test(trimmed)) return false;
+    return /^[\p{L}\p{N}][\p{L}\p{N}'’.-]*$/u.test(trimmed);
+  }
+
+  function getCurrentSelectionRect() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+    const rect = range.getBoundingClientRect();
+    if (!rect || (!rect.width && !rect.height)) return null;
+    return rect;
+  }
+
+  function getRecallSelectionCandidate() {
+    const offsets = getSelectionOffsets();
+    if (!offsets || offsets.start === offsets.end) return null;
+
+    const fullText = getEditorText();
+    const selectedRaw = fullText.slice(offsets.start, offsets.end);
+    const leadingWhitespace = (selectedRaw.match(/^\s*/) || [''])[0].length;
+    const trailingWhitespace = (selectedRaw.match(/\s*$/) || [''])[0].length;
+    const trimmedStart = offsets.start + leadingWhitespace;
+    const trimmedEnd = offsets.end - trailingWhitespace;
+    if (trimmedStart >= trimmedEnd) return null;
+
+    const selectedText = fullText.slice(trimmedStart, trimmedEnd);
+    if (selectedText.length < RECALL_SELECTION_MIN_LENGTH || !isSingleWordSelection(selectedText)) return null;
+
+    const rect = getCurrentSelectionRect();
+    if (!rect) return null;
+
+    return {
+      fullText,
+      selectedText,
+      start: trimmedStart,
+      end: trimmedEnd,
+      rect,
+    };
   }
 
   function normalizeMetadataText(value) {
@@ -1061,6 +1111,182 @@
     }, 3500);
   }
 
+  // --- Recall ---
+  let recallDismissTimer = null;
+  let recallLongPressTimer = null;
+  let recallPendingTrigger = null;
+  let recallAbortController = null;
+  let recallRequestToken = 0;
+
+  function clearRecallDismissTimer() {
+    if (!recallDismissTimer) return;
+    clearTimeout(recallDismissTimer);
+    recallDismissTimer = null;
+  }
+
+  function clearRecallLongPressTimer() {
+    if (!recallLongPressTimer) return;
+    clearTimeout(recallLongPressTimer);
+    recallLongPressTimer = null;
+  }
+
+  function clearRecallPendingTrigger() {
+    recallPendingTrigger = null;
+  }
+
+  function hideRecallPulse() {
+    recallPulse.classList.remove('visible');
+    recallPulse.classList.add('hidden');
+    recallPulse.style.left = '';
+    recallPulse.style.top = '';
+  }
+
+  function hideRecallOverlay() {
+    recallOverlay.classList.remove('visible');
+    recallOverlay.classList.add('hidden');
+    recallOverlay.textContent = '';
+    recallOverlay.style.left = '';
+    recallOverlay.style.top = '';
+    recallOverlay.style.maxWidth = '';
+  }
+
+  function clearRecallDisplay() {
+    clearRecallDismissTimer();
+    hideRecallPulse();
+    hideRecallOverlay();
+  }
+
+  function cancelRecallRequest() {
+    recallRequestToken += 1;
+    if (recallAbortController) {
+      recallAbortController.abort();
+      recallAbortController = null;
+    }
+  }
+
+  function dismissRecall(options = {}) {
+    clearRecallPendingTrigger();
+    clearRecallLongPressTimer();
+    if (options.abortRequest !== false) cancelRecallRequest();
+    clearRecallDisplay();
+  }
+
+  function scheduleRecallDismiss() {
+    clearRecallDismissTimer();
+    recallDismissTimer = setTimeout(() => {
+      recallDismissTimer = null;
+      clearRecallDisplay();
+    }, RECALL_DISMISS_MS);
+  }
+
+  function showRecallPulseAtRect(rect) {
+    if (!rect) return;
+    const containerRect = editorContainer.getBoundingClientRect();
+    const centerX = (rect.left - containerRect.left) + ((rect.width || 12) / 2);
+    const centerY = (rect.top - containerRect.top) + ((rect.height || getEditorLineHeightPx()) / 2);
+    recallPulse.style.left = `${Math.round(centerX)}px`;
+    recallPulse.style.top = `${Math.round(centerY)}px`;
+    recallPulse.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      recallPulse.classList.add('visible');
+    });
+  }
+
+  function positionRecallOverlayAtRect(rect) {
+    if (!rect) return;
+    const containerRect = editorContainer.getBoundingClientRect();
+    const availableWidth = Math.max(180, Math.min(352, containerRect.width - 24));
+    recallOverlay.style.maxWidth = `${Math.round(availableWidth)}px`;
+    recallOverlay.style.left = '0px';
+    recallOverlay.style.top = '0px';
+
+    const overlayWidth = recallOverlay.offsetWidth || availableWidth;
+    const overlayHeight = recallOverlay.offsetHeight || 0;
+    const desiredLeft = (rect.right - containerRect.left) + 12;
+    const maxLeft = Math.max(0, containerRect.width - overlayWidth);
+    const left = Math.max(0, Math.min(desiredLeft, maxLeft));
+    const aboveTop = (rect.top - containerRect.top) - overlayHeight - 10;
+    const belowTop = (rect.bottom - containerRect.top) + 10;
+    const top = aboveTop >= 0 ? aboveTop : belowTop;
+
+    recallOverlay.style.left = `${Math.round(left)}px`;
+    recallOverlay.style.top = `${Math.round(Math.max(0, top))}px`;
+  }
+
+  function showRecallOverlayText(text, rect) {
+    recallOverlay.textContent = text;
+    recallOverlay.classList.remove('hidden');
+    positionRecallOverlayAtRect(rect);
+    requestAnimationFrame(() => {
+      recallOverlay.classList.add('visible');
+    });
+    scheduleRecallDismiss();
+  }
+
+  function armRecallTrigger(source) {
+    recallPendingTrigger = {
+      source,
+      expiresAt: Date.now() + RECALL_TRIGGER_WINDOW_MS,
+    };
+  }
+
+  async function requestRecall(candidate) {
+    if (!currentStory || !candidate || !candidate.selectedText) return;
+
+    cancelRecallRequest();
+    clearRecallDisplay();
+    showRecallPulseAtRect(candidate.rect);
+
+    const requestToken = recallRequestToken;
+    const controller = new AbortController();
+    recallAbortController = controller;
+    const timeoutId = setTimeout(() => controller.abort(), RECALL_TIMEOUT_MS);
+
+    try {
+      const result = await api('/api/recall', {
+        method: 'POST',
+        signal: controller.signal,
+        body: JSON.stringify({
+          selectedText: candidate.selectedText,
+          fullText: candidate.fullText,
+          selectionStart: candidate.start,
+          selectionEnd: candidate.end,
+          storyIntent: storyIntentEl.value || null,
+        }),
+      });
+
+      if (requestToken !== recallRequestToken) return;
+      if (!result || !result.recall) {
+        clearRecallDisplay();
+        return;
+      }
+
+      showRecallOverlayText(result.recall, candidate.rect);
+    } catch {
+      if (requestToken !== recallRequestToken) return;
+      clearRecallDisplay();
+    } finally {
+      clearTimeout(timeoutId);
+      if (recallAbortController === controller) recallAbortController = null;
+    }
+  }
+
+  function triggerPendingRecallIfAvailable() {
+    if (!recallPendingTrigger) return false;
+    if (recallPendingTrigger.expiresAt < Date.now()) {
+      clearRecallPendingTrigger();
+      return false;
+    }
+
+    const candidate = getRecallSelectionCandidate();
+    if (!candidate) return false;
+
+    hideRewriteOverlay();
+    clearRecallPendingTrigger();
+    requestRecall(candidate);
+    return true;
+  }
+
   // --- Keyboard shortcut ---
   function handleKeydown(e) {
     if (shouldHandleEditorUndoRedo(e)) {
@@ -1095,9 +1321,19 @@
 
     const offsets = getSelectionOffsets();
     if (!offsets || offsets.start === offsets.end) {
+      dismissRecall();
       if (!rewriteOverlay.classList.contains('hidden')) return;
       updateGemVisibility();
       refreshChapterContextAtCursor();
+      return;
+    }
+
+    if (triggerPendingRecallIfAvailable()) return;
+
+    const recallCandidate = getRecallSelectionCandidate();
+    if (recallCandidate) {
+      hideRewriteOverlay();
+      updateGemVisibility();
       return;
     }
 
@@ -1110,10 +1346,12 @@
     const trimmedSelection = fullText.slice(trimmedStart, trimmedEnd);
 
     if (trimmedSelection.length < 3) {
+      dismissRecall();
       hideRewriteOverlay();
       return;
     }
 
+    dismissRecall();
     selectedTextForRewrite = trimmedSelection;
     selectedRangeForRewrite = { start: trimmedStart, end: trimmedEnd };
 
@@ -1349,6 +1587,7 @@
     const cursorOffset = getCursorOffset();
     const text = getEditorText();
     const previousScrollY = window.scrollY;
+    dismissRecall();
     if (!isApplyingHistory && pendingBeforeInputSnapshot && pendingBeforeInputSnapshot.text !== text) {
       pushSnapshot(undoStack, pendingBeforeInputSnapshot);
       redoStack = [];
@@ -1375,6 +1614,23 @@
     refreshChapterContextAtCursor();
     ensureCursorBottomPadding();
   });
+  editor.addEventListener('dblclick', () => {
+    armRecallTrigger('double_click');
+    requestAnimationFrame(() => {
+      triggerPendingRecallIfAvailable();
+    });
+  });
+  editor.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    clearRecallLongPressTimer();
+    recallLongPressTimer = setTimeout(() => {
+      recallLongPressTimer = null;
+      armRecallTrigger('long_press');
+      triggerPendingRecallIfAvailable();
+    }, RECALL_LONG_PRESS_DELAY_MS);
+  });
+  editor.addEventListener('pointerup', clearRecallLongPressTimer);
+  editor.addEventListener('pointercancel', clearRecallLongPressTimer);
 
   editorContainer.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
@@ -1391,9 +1647,16 @@
   });
 
   document.addEventListener('keydown', handleKeydown);
+  document.addEventListener('mousedown', () => {
+    dismissRecall();
+  });
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleRemoteRefresh();
+    if (document.hidden) {
+      dismissRecall();
+      return;
+    }
+    scheduleRemoteRefresh();
   });
   window.addEventListener('focus', scheduleRemoteRefresh);
   window.addEventListener('pageshow', scheduleRemoteRefresh);
@@ -1420,21 +1683,25 @@
   storyPanelBackdrop.addEventListener('click', hideStoryPanel);
 
   window.addEventListener('resize', () => {
+    dismissRecall();
     if (!storyPanel.classList.contains('hidden')) positionStoryPanel();
     if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
     updateGemVisibility();
   });
   window.addEventListener('scroll', () => {
+    dismissRecall();
     if (!storyPanel.classList.contains('hidden')) hideStoryPanel();
     if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
     updateGemVisibility();
   }, { passive: true });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
+      dismissRecall();
       if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
       updateGemVisibility();
     });
     window.visualViewport.addEventListener('scroll', () => {
+      dismissRecall();
       if (!rewriteOverlay.classList.contains('hidden')) positionRewriteOverlay();
       updateGemVisibility();
     });

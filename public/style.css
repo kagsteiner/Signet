@@ -252,6 +252,62 @@ body {
   margin-bottom: 0.2em;
 }
 
+/* --- Recall --- */
+
+.recall-pulse {
+  position: absolute;
+  width: 1.8rem;
+  height: 1.8rem;
+  margin-left: -0.9rem;
+  margin-top: -0.9rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(107, 92, 77, 0.16) 0%, rgba(107, 92, 77, 0.08) 45%, rgba(107, 92, 77, 0) 72%);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.88);
+  transition: opacity 160ms ease, transform 220ms ease;
+  z-index: 16;
+}
+
+.recall-pulse.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.recall-pulse.hidden {
+  display: none;
+}
+
+.recall-overlay {
+  position: absolute;
+  max-width: min(22rem, calc(100vw - 3rem));
+  font-family: var(--serif);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: rgba(61, 50, 41, 0.95);
+  white-space: pre-line;
+  pointer-events: none;
+  padding: 0.28rem 0.45rem;
+  background: rgba(250, 246, 240, 0.94);
+  border-radius: 0.45rem;
+  box-shadow: 0 3px 14px rgba(61, 50, 41, 0.05);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 170ms ease, transform 170ms ease;
+  z-index: 18;
+  text-wrap: pretty;
+}
+
+.recall-overlay.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.recall-overlay.hidden {
+  display: none;
+}
+
 /* --- The Gem --- */
 
 #gem-container {
