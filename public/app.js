@@ -48,6 +48,10 @@
   const gemContainer = document.getElementById('gem-container');
   const gem = document.getElementById('gem');
   const storyIntentEl = document.getElementById('story-intent');
+  const intentSourceSelect = document.getElementById('intent-source-select');
+  const intentReference = document.getElementById('intent-reference');
+  const intentReferenceTitle = document.getElementById('intent-reference-title');
+  const intentReferenceOpen = document.getElementById('intent-reference-open');
   const storyTitleInput = document.getElementById('story-title-input');
   const storyAuthorInput = document.getElementById('story-author-input');
   const storyPanel = document.getElementById('story-panel');
@@ -123,6 +127,7 @@
 
     setStoryPanelFields(currentStory);
     storyIntentEl.value = currentStory.story_intent || '';
+    syncIntentSourceUI();
 
     const nextText = currentStory.content_markdown || '';
     const nextStart = Math.min(previousSelection.start, nextText.length);
@@ -154,7 +159,8 @@
         || nextStory.content_markdown !== (currentStory.content_markdown || '')
         || (nextStory.title || '') !== (currentStory.title || '')
         || (nextStory.author || '') !== (currentStory.author || '')
-        || (nextStory.story_intent || '') !== (currentStory.story_intent || '');
+        || (nextStory.story_intent || '') !== (currentStory.story_intent || '')
+        || (nextStory.intent_story_id || '') !== (currentStory.intent_story_id || '');
       if (!hasChanged) return;
 
       applyStoryFromServer(nextStory);
@@ -181,6 +187,7 @@
     setStoryPanelFields(currentStory);
     refreshStoryHeaderLabel(currentStory.content_markdown || '');
     storyIntentEl.value = currentStory.story_intent || '';
+    syncIntentSourceUI();
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
     resetHistoryForText(storyText);
@@ -682,6 +689,82 @@
     } catch { /* silent */ }
   }
 
+  // --- Story intent source (write directly vs. another story) ---
+  function getIntentStoryLabel(story) {
+    return getStoryDisplayName(story, { maxLength: 60, emptyFallback: 'Untitled story' });
+  }
+
+  function findStoryById(storyId) {
+    return stories.find((s) => s.id === storyId) || null;
+  }
+
+  function renderIntentSourceOptions() {
+    if (!intentSourceSelect) return;
+    intentSourceSelect.innerHTML = '';
+    const directOption = document.createElement('option');
+    directOption.value = '';
+    directOption.textContent = 'Write directly';
+    intentSourceSelect.appendChild(directOption);
+    for (const s of stories) {
+      if (currentStory && s.id === currentStory.id) continue;
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = getIntentStoryLabel(s);
+      intentSourceSelect.appendChild(opt);
+    }
+  }
+
+  function syncIntentSourceUI() {
+    if (!intentSourceSelect) return;
+    const refId = currentStory && currentStory.intent_story_id ? currentStory.intent_story_id : '';
+    const referenced = refId ? findStoryById(refId) : null;
+    if (refId && referenced) {
+      intentSourceSelect.value = refId;
+      intentReferenceTitle.textContent = getIntentStoryLabel(referenced);
+      intentReference.classList.remove('hidden');
+      storyIntentEl.classList.add('hidden');
+    } else {
+      // Direct mode (or a referenced story that is no longer available).
+      intentSourceSelect.value = '';
+      intentReference.classList.add('hidden');
+      storyIntentEl.classList.remove('hidden');
+    }
+  }
+
+  async function refreshIntentSourceOptions() {
+    if (!currentStory) return;
+    try {
+      const data = await api('/api/stories');
+      if (data) stories = data.stories;
+    } catch { /* keep existing list */ }
+    renderIntentSourceOptions();
+    syncIntentSourceUI();
+  }
+
+  async function onIntentSourceChange() {
+    if (!currentStory) return;
+    const value = intentSourceSelect.value || null;
+    currentStory.intent_story_id = value;
+    syncIntentSourceUI();
+    try {
+      const result = await api(`/api/stories/${currentStory.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ intent_story_id: value }),
+      });
+      if (result && result.story) {
+        currentStory = result.story;
+        syncIntentSourceUI();
+      }
+    } catch { /* silent */ }
+  }
+
+  function openIntentStory() {
+    if (!currentStory || !currentStory.intent_story_id) return;
+    const targetId = currentStory.intent_story_id;
+    hideStoryPanel();
+    loadStory(targetId);
+  }
+
   // --- Story metadata ---
   function scheduleMetadataSave() {
     if (metadataSaveTimer) clearTimeout(metadataSaveTimer);
@@ -804,6 +887,9 @@
     hideStoryOverlay();
     positionStoryPanel();
     renderStoryPanelChapters();
+    renderIntentSourceOptions();
+    syncIntentSourceUI();
+    refreshIntentSourceOptions();
     storyPanelBackdrop.classList.remove('hidden');
     storyPanel.classList.remove('hidden');
     requestAnimationFrame(() => {
@@ -1040,6 +1126,7 @@
           followingText: afterCursor.slice(0, 400),
           mode,
           storyIntent: storyIntentEl.value || null,
+          storyId: currentStory ? currentStory.id : null,
         }),
       });
 
@@ -1253,6 +1340,7 @@
           selectionStart: candidate.start,
           selectionEnd: candidate.end,
           storyIntent: storyIntentEl.value || null,
+          storyId: currentStory ? currentStory.id : null,
         }),
       });
 
@@ -1441,6 +1529,7 @@
           selectionStart: selectedRangeForRewrite.start,
           selectionEnd: selectedRangeForRewrite.end,
           storyIntent: storyIntentEl.value || null,
+          storyId: currentStory ? currentStory.id : null,
         }),
       });
 
@@ -1677,6 +1766,8 @@
   storyAuthorInput.addEventListener('blur', saveMetadata);
   storyIntentEl.addEventListener('input', scheduleIntentSave);
   storyIntentEl.addEventListener('blur', saveIntents);
+  intentSourceSelect.addEventListener('change', onIntentSourceChange);
+  intentReferenceOpen.addEventListener('click', openIntentStory);
   manageStoriesLink.addEventListener('click', () => {
     hideStoryPanel();
     showStoryOverlay();

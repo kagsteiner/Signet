@@ -46,6 +46,8 @@ test('story updates respect ownership and allowed fields', (t) => {
   const userTwo = fixture.db.createUser('Author Two');
   const story = fixture.db.createStory(userOne.id, { title: 'Draft', initialContent: 'Alpha' });
 
+  const intentStory = fixture.db.createStory(userOne.id, { title: 'Intent', initialContent: 'Guidance' });
+
   const denied = fixture.db.updateStory(story.id, userTwo.id, { title: 'Nope' });
   const ignored = fixture.db.updateStory(story.id, userOne.id, { chapter_intent: 'ignored' });
   const updated = fixture.db.updateStory(story.id, userOne.id, {
@@ -57,6 +59,17 @@ test('story updates respect ownership and allowed fields', (t) => {
   assert.equal(ignored, null);
   assert.equal(updated.title, 'Published');
   assert.equal(updated.content_markdown, 'Beta');
+  assert.equal(updated.intent_story_id, null);
+
+  const referenced = fixture.db.updateStory(story.id, userOne.id, {
+    intent_story_id: intentStory.id,
+  });
+  assert.equal(referenced.intent_story_id, intentStory.id);
+
+  const cleared = fixture.db.updateStory(story.id, userOne.id, {
+    intent_story_id: null,
+  });
+  assert.equal(cleared.intent_story_id, null);
 });
 
 test('createDb migrates existing installs with missing author and tier columns', (t) => {
@@ -95,6 +108,7 @@ test('createDb migrates existing installs with missing author and tier columns',
   const userColumns = migrated.getDb().prepare('PRAGMA table_info(users)').all();
 
   assert.equal(storyColumns.some((column) => column.name === 'author'), true);
+  assert.equal(storyColumns.some((column) => column.name === 'intent_story_id'), true);
   assert.equal(userColumns.some((column) => column.name === 'tier'), true);
 
   migrated.close();

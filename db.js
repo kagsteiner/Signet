@@ -77,6 +77,7 @@ function createDb(options = {}) {
         content_markdown TEXT NOT NULL,
         story_intent TEXT,
         chapter_intent TEXT,
+        intent_story_id TEXT,
         last_modified INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
@@ -94,6 +95,11 @@ function createDb(options = {}) {
     const hasAuthor = storyColumns.some((column) => column.name === 'author');
     if (!hasAuthor) {
       db.exec('ALTER TABLE stories ADD COLUMN author TEXT');
+    }
+
+    const hasIntentStoryId = storyColumns.some((column) => column.name === 'intent_story_id');
+    if (!hasIntentStoryId) {
+      db.exec('ALTER TABLE stories ADD COLUMN intent_story_id TEXT');
     }
 
     const userColumns = db.prepare('PRAGMA table_info(users)').all();
@@ -189,8 +195,8 @@ function createDb(options = {}) {
     const title = typeof options.title === 'string' ? options.title : '';
     const author = typeof options.author === 'string' ? options.author : '';
     const initialContent = options.initialContent !== undefined ? options.initialContent : '';
-    d.prepare('INSERT INTO stories (id, user_id, title, author, content_markdown, story_intent, chapter_intent, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, author, initialContent, null, null, timestamp, timestamp);
-    return { id, user_id: userId, title, author, content_markdown: initialContent, story_intent: null, chapter_intent: null, last_modified: timestamp, created_at: timestamp };
+    d.prepare('INSERT INTO stories (id, user_id, title, author, content_markdown, story_intent, chapter_intent, intent_story_id, last_modified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, title, author, initialContent, null, null, null, timestamp, timestamp);
+    return { id, user_id: userId, title, author, content_markdown: initialContent, story_intent: null, chapter_intent: null, intent_story_id: null, last_modified: timestamp, created_at: timestamp };
   }
 
   function getUserStories(userId) {
@@ -203,7 +209,7 @@ function createDb(options = {}) {
 
   function updateStory(storyId, userId, fields) {
     const d = getDb();
-    const allowed = ['title', 'author', 'content_markdown', 'story_intent'];
+    const allowed = ['title', 'author', 'content_markdown', 'story_intent', 'intent_story_id'];
     const sets = [];
     const values = [];
     for (const key of allowed) {

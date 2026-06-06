@@ -36,7 +36,14 @@
       </section>
       <section class="story-panel-section story-panel-intent">
         <label for="story-intent">Story Intent</label>
+        <select id="intent-source-select" class="intent-source-select" aria-label="Story intent source">
+          <option value="">Write directly</option>
+        </select>
         <textarea id="story-intent" placeholder="Direction, planned chapters, notes…" rows="8"></textarea>
+        <div id="intent-reference" class="intent-reference hidden">
+          <span class="intent-reference-text">Using “<span id="intent-reference-title"></span>” as this story’s intent.</span>
+          <button id="intent-reference-open" class="intent-reference-open" type="button">Open</button>
+        </div>
       </section>
       <section id="story-panel-chapters" class="story-panel-section story-panel-chapters hidden"></section>
       <section class="story-panel-section story-panel-manage">

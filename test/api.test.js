@@ -171,6 +171,86 @@ test('continue endpoint uses injected AI and prompt builders', async (t) => {
   assert.match(calls[0].userMessage, /Text before cursor:/);
 });
 
+test('continue endpoint resolves referenced story as effective intent', async (t) => {
+  const fixture = createTempDb();
+  const calls = [];
+  const ai = {
+    configured: true,
+    async chat(systemPrompt) {
+      calls.push({ systemPrompt });
+      return 'The lantern trembled in her hand.';
+    },
+  };
+  const server = await startTestServer({ db: fixture.db, ai });
+  const auth = createAuthState(fixture.db, 'Intent Ref User');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const intentStory = fixture.db.createStory(auth.user.id, {
+    title: 'Intent',
+    initialContent: 'REFERENCED STORY GUIDANCE',
+  });
+  const mainStory = fixture.db.createStory(auth.user.id, { title: 'Main', initialContent: 'Body' });
+  fixture.db.updateStory(mainStory.id, auth.user.id, { intent_story_id: intentStory.id });
+
+  const response = await requestJson(server.origin, '/api/continue', {
+    method: 'POST',
+    headers: { Cookie: auth.cookie },
+    body: {
+      precedingText: 'Night settled over the lane.',
+      followingText: '',
+      storyIntent: 'inline fallback that should be ignored',
+      storyId: mainStory.id,
+      mode: 'default',
+    },
+  });
+
+  assert.equal(response.res.status, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].systemPrompt, /REFERENCED STORY GUIDANCE/);
+  assert.doesNotMatch(calls[0].systemPrompt, /inline fallback/);
+});
+
+test('continue endpoint falls back to inline intent when reference is missing', async (t) => {
+  const fixture = createTempDb();
+  const calls = [];
+  const ai = {
+    configured: true,
+    async chat(systemPrompt) {
+      calls.push({ systemPrompt });
+      return 'The lantern trembled in her hand.';
+    },
+  };
+  const server = await startTestServer({ db: fixture.db, ai });
+  const auth = createAuthState(fixture.db, 'Intent Fallback User');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const mainStory = fixture.db.createStory(auth.user.id, { title: 'Main', initialContent: 'Body' });
+  // Dangling reference to a non-existent story.
+  fixture.db.updateStory(mainStory.id, auth.user.id, { intent_story_id: 'does-not-exist' });
+
+  const response = await requestJson(server.origin, '/api/continue', {
+    method: 'POST',
+    headers: { Cookie: auth.cookie },
+    body: {
+      precedingText: 'Night settled over the lane.',
+      followingText: '',
+      storyIntent: 'inline fallback guidance',
+      storyId: mainStory.id,
+      mode: 'default',
+    },
+  });
+
+  assert.equal(response.res.status, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].systemPrompt, /inline fallback guidance/);
+});
+
 test('continue-premium endpoint uses chatPremium and parses best candidate', async (t) => {
   const fixture = createTempDb();
   const calls = [];

@@ -66,6 +66,18 @@ function createApp(options = {}) {
     return getBasePath(req, env);
   }
 
+  // Resolve the effective story intent. When a story references another story as
+  // its intent, that story's manuscript is used; otherwise the inline value is kept.
+  // Resolution is one level deep (no recursion) and scoped to the owning user.
+  function resolveStoryIntent(userId, storyId, inlineFallback) {
+    if (!storyId) return inlineFallback;
+    const story = db.getStory(storyId, userId);
+    if (!story || !story.intent_story_id) return inlineFallback;
+    const referenced = db.getStory(story.intent_story_id, userId);
+    if (!referenced) return inlineFallback;
+    return referenced.content_markdown || '';
+  }
+
   function getCachedChapterData(story) {
     const cached = chapterIndexCache.get(story.id);
     if (cached && cached.lastModified === story.last_modified && cached.content === story.content_markdown) {
@@ -226,11 +238,12 @@ function createApp(options = {}) {
 
   app.post('/api/continue', requireAuth, async (req, res) => {
     if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
-    const { precedingText, followingText, storyIntent, mode } = req.body;
+    const { precedingText, followingText, storyIntent, storyId, mode } = req.body;
     if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
     try {
-      const systemPrompt = prompts.buildContinuationPrompt(storyIntent, mode);
+      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
+      const systemPrompt = prompts.buildContinuationPrompt(effectiveIntent, mode);
       const userContent = prompts.buildContinuationUserMessage(precedingText, followingText, mode);
       const result = await ai.chat(systemPrompt, userContent, req.userTier, req.userId);
       res.json({ sentence: result });
@@ -242,11 +255,12 @@ function createApp(options = {}) {
 
   app.post('/api/continue-premium', requireAuth, async (req, res) => {
     if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
-    const { precedingText, followingText, storyIntent, mode } = req.body;
+    const { precedingText, followingText, storyIntent, storyId, mode } = req.body;
     if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
     try {
-      const systemPrompt = prompts.buildPremiumContinuationPrompt(storyIntent, mode);
+      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
+      const systemPrompt = prompts.buildPremiumContinuationPrompt(effectiveIntent, mode);
       const userContent = prompts.buildPremiumContinuationUserMessage(precedingText, followingText, mode);
       if (DEBUG_PREMIUM_CONTINUATION) {
         console.log('\n=== PREMIUM CONTINUATION — SYSTEM PROMPT ===\n' + systemPrompt);
@@ -267,17 +281,18 @@ function createApp(options = {}) {
 
   app.post('/api/rewrite', requireAuth, async (req, res) => {
     if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
-    const { selectedText, instruction, fullText, selectionStart, selectionEnd, storyIntent } = req.body;
+    const { selectedText, instruction, fullText, selectionStart, selectionEnd, storyIntent, storyId } = req.body;
     if (!selectedText || !instruction) return res.status(400).json({ error: 'Missing text or instruction' });
 
     try {
+      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
       const selectedHasOuterQuotes = hasOuterMatchingQuotes(selectedText);
       const rewriteContext = buildRewriteContext(fullText, selectionStart, selectionEnd, selectedText);
       const { systemPrompt, userMessage } = buildRewriteMessages(
         selectedText,
         instruction,
         rewriteContext,
-        storyIntent
+        effectiveIntent
       );
       const raw = await ai.chat(systemPrompt, userMessage, req.userTier, req.userId);
       const result = normalizeRewriteResult(raw, selectedHasOuterQuotes);
@@ -296,6 +311,7 @@ function createApp(options = {}) {
       selectionStart,
       selectionEnd,
       storyIntent,
+      storyId,
     } = req.body;
     if (!selectedText) return res.status(400).json({ error: 'Missing selected text' });
 
@@ -305,7 +321,8 @@ function createApp(options = {}) {
         return res.status(400).json({ error: 'Invalid recall selection' });
       }
 
-      const systemPrompt = prompts.buildRecallPrompt(storyIntent);
+      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
+      const systemPrompt = prompts.buildRecallPrompt(effectiveIntent);
       const userMessage = prompts.buildRecallUserMessage(selectedText, recallContext);
       const rawResult = typeof ai.chatWithProvider === 'function'
         ? await ai.chatWithProvider(systemPrompt, userMessage, 'openaiMini', req.userId)
