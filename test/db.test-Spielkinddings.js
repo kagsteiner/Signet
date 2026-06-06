@@ -59,6 +59,78 @@ test('story updates respect ownership and allowed fields', (t) => {
   assert.equal(updated.content_markdown, 'Beta');
 });
 
+test('createUser returns user with valid access key', (t) => {
+  const fixture = createTempDb({ now: 1000 });
+  t.after(() => fixture.cleanup());
+
+  const user = fixture.db.createUser('Alice');
+  assert.equal(user.name, 'Alice');
+  assert.ok(user.id, 'user should have an id');
+  assert.ok(user.accessKey, 'user should have an accessKey');
+
+  const hash = hashAccessKey(user.accessKey);
+  const found = fixture.db.findUserByAccessKeyHash(hash);
+  assert.equal(found.id, user.id);
+  assert.equal(found.name, 'Alice');
+});
+
+test('createUser gives each user a unique key', (t) => {
+  const fixture = createTempDb({ now: 1000 });
+  t.after(() => fixture.cleanup());
+
+  const a = fixture.db.createUser('A');
+  const b = fixture.db.createUser('B');
+  assert.notEqual(a.accessKey, b.accessKey);
+  assert.notEqual(a.id, b.id);
+});
+
+test('regenerateAccessKey invalidates old key and returns a working new one', (t) => {
+  const fixture = createTempDb({ now: 1000 });
+  t.after(() => fixture.cleanup());
+
+  const user = fixture.db.createUser('Bob');
+  const oldKey = user.accessKey;
+  const session = fixture.db.createSession(user.id);
+  assert.ok(fixture.db.findValidSession(session.id), 'session should be valid before regeneration');
+
+  const newKey = fixture.db.regenerateAccessKey(user.id);
+  assert.notEqual(newKey, oldKey);
+
+  const oldLookup = fixture.db.findUserByAccessKeyHash(hashAccessKey(oldKey));
+  assert.equal(oldLookup, undefined, 'old key should no longer resolve');
+
+  const newLookup = fixture.db.findUserByAccessKeyHash(hashAccessKey(newKey));
+  assert.equal(newLookup.id, user.id, 'new key should resolve to the same user');
+
+  assert.equal(fixture.db.findValidSession(session.id), null, 'existing sessions should be revoked');
+});
+
+test('regenerateAccessKey throws for nonexistent userId', (t) => {
+  const fixture = createTempDb({ now: 1000 });
+  t.after(() => fixture.cleanup());
+
+  assert.throws(() => fixture.db.regenerateAccessKey('no-such-id'), /User not found/);
+});
+
+test('listUsers returns all created users without access keys', (t) => {
+  const fixture = createTempDb({ now: 1000 });
+  t.after(() => fixture.cleanup());
+
+  fixture.db.createUser('Carol');
+  fixture.db.createUser('Dave');
+  const users = fixture.db.listUsers();
+
+  assert.equal(users.length, 2);
+  const names = users.map(u => u.name).sort();
+  assert.deepEqual(names, ['Carol', 'Dave']);
+  for (const u of users) {
+    assert.ok(u.id);
+    assert.ok(u.created_at);
+    assert.equal(u.access_key_hash, undefined, 'listUsers should not expose the hash');
+    assert.equal(u.accessKey, undefined, 'listUsers should not expose the key');
+  }
+});
+
 test('createDb migrates existing installs with missing author and tier columns', (t) => {
   const fixture = createTempDb({ now: 100 });
   t.after(() => fixture.cleanup());

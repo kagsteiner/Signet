@@ -17,6 +17,8 @@ const {
   normalizeRecallResult,
 } = require('./server/app-helpers');
 
+const DEBUG_PREMIUM_CONTINUATION = false;
+
 function renderErrorPage(message) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -235,6 +237,31 @@ function createApp(options = {}) {
     } catch (err) {
       console.error('Continuation error:', err);
       res.status(500).json({ error: 'Failed to generate continuation' });
+    }
+  });
+
+  app.post('/api/continue-premium', requireAuth, async (req, res) => {
+    if (!ai.configured) return res.status(500).json({ error: 'AI not configured' });
+    const { precedingText, followingText, storyIntent, mode } = req.body;
+    if (!precedingText) return res.status(400).json({ error: 'No text provided' });
+
+    try {
+      const systemPrompt = prompts.buildPremiumContinuationPrompt(storyIntent, mode);
+      const userContent = prompts.buildPremiumContinuationUserMessage(precedingText, followingText, mode);
+      if (DEBUG_PREMIUM_CONTINUATION) {
+        console.log('\n=== PREMIUM CONTINUATION — SYSTEM PROMPT ===\n' + systemPrompt);
+        console.log('\n=== PREMIUM CONTINUATION — USER MESSAGE ===\n' + userContent);
+      }
+      const raw = await ai.chatPremium(systemPrompt, userContent, req.userTier, req.userId);
+      const parsed = prompts.parsePremiumContinuationResult(raw);
+      if (DEBUG_PREMIUM_CONTINUATION) {
+        console.log('\n=== PREMIUM CONTINUATION — RAW LLM RESPONSE ===\n' + raw);
+        console.log('\n=== PREMIUM CONTINUATION — SELECTED SENTENCE (score ' + (parsed.score ?? 'n/a') + ') ===\n' + parsed.sentence + '\n');
+      }
+      res.json({ sentence: parsed.sentence });
+    } catch (err) {
+      console.error('Premium continuation error:', err);
+      res.status(500).json({ error: 'Failed to generate premium continuation' });
     }
   });
 

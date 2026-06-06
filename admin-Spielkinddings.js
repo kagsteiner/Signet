@@ -10,7 +10,7 @@ Signet Admin CLI
 Usage:
   node admin.js create-user <name>       Create a new user and print their access URL
   node admin.js list-users               List all users
-  node admin.js regenerate-key <userId>  Regenerate access key (user id = UUID from list-users, not display name)
+  node admin.js regenerate-key <id|name>  Regenerate access key for a user (revokes all sessions)
   `);
 }
 
@@ -48,21 +48,20 @@ switch (command) {
   }
 
   case 'regenerate-key': {
-    const userId = args[1];
-    if (!userId) {
-      console.error('Error: userId is required');
+    const identifier = args[1];
+    if (!identifier) {
+      console.error('Error: userId or name is required');
       usage();
       process.exit(1);
     }
-    let newKey;
-    try {
-      newKey = db.regenerateAccessKey(userId);
-    } catch (err) {
-      console.error(err.message || String(err));
-      console.error('Tip: run `node admin.js list-users` and pass the user id (UUID), not the display name.');
+    const users = db.listUsers();
+    const match = users.find(u => u.id === identifier) || users.find(u => u.name === identifier);
+    if (!match) {
+      console.error(`Error: No user found matching "${identifier}"`);
       process.exit(1);
     }
-    console.log(`\nAccess key regenerated. All existing sessions revoked.`);
+    const newKey = db.regenerateAccessKey(match.id);
+    console.log(`\nAccess key regenerated for ${match.name}. All existing sessions revoked.`);
     console.log(`\n  New Access URL: /enter/${newKey}`);
     console.log(`\n  Share with the user. Previous key is now invalid.\n`);
     break;

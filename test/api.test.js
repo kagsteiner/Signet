@@ -33,6 +33,54 @@ test('api requires auth for protected routes', async (t) => {
   assert.equal(res.status, 401);
 });
 
+test('/enter/:accessKey sets session cookie for valid key', async (t) => {
+  const fixture = createTempDb();
+  const server = await startTestServer({ db: fixture.db });
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const user = fixture.db.createUser('Enter User');
+  const res = await fetch(`${server.origin}/enter/${user.accessKey}`, { redirect: 'manual' });
+  assert.equal(res.status, 302, 'should redirect on valid key');
+  const setCookie = res.headers.get('set-cookie');
+  assert.ok(setCookie && setCookie.includes('session='), 'should set a session cookie');
+});
+
+test('/enter/:accessKey rejects invalid key', async (t) => {
+  const fixture = createTempDb();
+  const server = await startTestServer({ db: fixture.db });
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const res = await fetch(`${server.origin}/enter/boguskey123`, { redirect: 'manual' });
+  assert.equal(res.status, 404);
+  const body = await res.text();
+  assert.ok(body.includes('Access key not recognized'));
+});
+
+test('/enter rejects old key after regeneration', async (t) => {
+  const fixture = createTempDb();
+  const server = await startTestServer({ db: fixture.db });
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const user = fixture.db.createUser('Regen User');
+  const oldKey = user.accessKey;
+  const newKey = fixture.db.regenerateAccessKey(user.id);
+
+  const oldRes = await fetch(`${server.origin}/enter/${oldKey}`, { redirect: 'manual' });
+  assert.equal(oldRes.status, 404, 'old key should be rejected');
+
+  const newRes = await fetch(`${server.origin}/enter/${newKey}`, { redirect: 'manual' });
+  assert.equal(newRes.status, 302, 'new key should work');
+});
+
 test('story CRUD and chapter-context endpoints work with isolated db', async (t) => {
   const fixture = createTempDb({ now: 1000 });
   const server = await startTestServer({ db: fixture.db });
@@ -121,6 +169,49 @@ test('continue endpoint uses injected AI and prompt builders', async (t) => {
   assert.equal(calls[0].tier, 'gold');
   assert.match(calls[0].systemPrompt, /beginning-of-paragraph continuation/);
   assert.match(calls[0].userMessage, /Text before cursor:/);
+});
+
+test('continue-premium endpoint uses chatPremium and parses best candidate', async (t) => {
+  const fixture = createTempDb();
+  const calls = [];
+  const ai = {
+    configured: true,
+    async chatPremium(systemPrompt, userMessage, tier, userId) {
+      calls.push({ systemPrompt, userMessage, tier, userId });
+      return JSON.stringify({
+        candidates: [
+          { text: 'Weak sentence.', style: 3, metaphors: 2, plot: 4 },
+          { text: 'The harbour bells tolled once, then silence swallowed the rest.', style: 9, metaphors: 8, plot: 9 },
+          { text: 'Medium sentence.', style: 5, metaphors: 5, plot: 5 },
+        ],
+      });
+    },
+  };
+  const server = await startTestServer({ db: fixture.db, ai });
+  const auth = createAuthState(fixture.db, 'Premium User');
+  fixture.db.setUserTier(auth.user.id, 'gold');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const response = await requestJson(server.origin, '/api/continue-premium', {
+    method: 'POST',
+    headers: { Cookie: auth.cookie },
+    body: {
+      precedingText: 'Night settled over the lane.',
+      followingText: '',
+      storyIntent: 'Keep the tone tense.',
+      mode: 'default',
+    },
+  });
+
+  assert.equal(response.res.status, 200);
+  assert.equal(response.json.sentence, 'The harbour bells tolled once, then silence swallowed the rest.');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].tier, 'gold');
+  assert.match(calls[0].systemPrompt, /PHASE 1/);
+  assert.match(calls[0].systemPrompt, /PHASE 2/);
 });
 
 test('rewrite endpoint normalizes quoted AI output', async (t) => {

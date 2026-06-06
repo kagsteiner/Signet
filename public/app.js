@@ -1032,7 +1032,8 @@
     }
 
     try {
-      const result = await api('/api/continue', {
+      const endpoint = options.premium ? '/api/continue-premium' : '/api/continue';
+      const result = await api(endpoint, {
         method: 'POST',
         body: JSON.stringify({
           precedingText: precedingText.slice(-2000),
@@ -1308,7 +1309,7 @@
       e.preventDefault();
       gem.classList.add('active');
       setTimeout(() => gem.classList.remove('active'), 300);
-      triggerContinuation({ source: 'shortcut' });
+      triggerContinuation({ source: 'shortcut', premium: e.shiftKey });
     }
   }
 
