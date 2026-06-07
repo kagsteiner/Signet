@@ -29,9 +29,20 @@ Select a passage of text. A small inline field appears with the placeholder **�
 
 **Double-click** a single word (or **long-press** on mobile) to surface a brief reminder of what that word means *in your story* — a character, a place, a name you have not seen in a while. The note appears in a small floating line near the word and fades when you type or click away. If the manuscript does not establish a clear meaning, nothing is shown. Recall uses a fast OpenAI mini model and is separate from the tier-based Gem and Transform stack.
 
+### Story intent
+
+Each story can carry a **story intent** — notes on direction, planned chapters, and tone. The Gem, Transform, and Recall use it as background guidance (not as established fact in the manuscript).
+
+Open the **story panel** (click the story title at the top) and find **Story Intent**. You can either:
+
+- **Write directly** — enter intent in the textarea.
+- **Use another story** — choose one of your other stories from the dropdown. That story’s manuscript becomes this story’s intent, so you can write a long or LLM-assisted intent in the full editor and link it here. Inline text is kept if you switch back to “Write directly.”
+
+When a story is linked as intent, the panel shows which story is in use and an **Open** button to jump to it.
+
 ### Story panel and chapters
 
-Click the **story title** at the top to open the story panel: title, author, **story intent**, and a chapter overview when the manuscript has several chapters. Chapters are marked with divider lines (`*`, `---`, or `-*-`); the line after a divider becomes the chapter title.
+Click the **story title** at the top to open the story panel: title, author, story intent (above), and a chapter overview when the manuscript has several chapters. Chapters are marked with divider lines (`*`, `---`, or `-*-`); the line after a divider becomes the chapter title.
 
 ## Setup
 
@@ -93,17 +104,6 @@ npm start
 # With AI features (set keys for the tiers you use — see table above)
 DEEPSEEK_API_KEY=... ANTHROPIC_API_KEY=... OPENAI_API_KEY=... npm start
 ```
-
-## Story intent
-
-Each story can carry a **story intent** — notes on direction, planned chapters, and tone. The Gem, rewrite, and recall use it as background guidance (not as established fact in the manuscript).
-
-Open the **story panel** (click the story title at the top) and find **Story Intent**. You can either:
-
-- **Write directly** — enter intent in the textarea, as before.
-- **Use another story** — choose one of your other stories from the dropdown. That story’s manuscript becomes this story’s intent, so you can write a long or LLM-assisted intent in the full editor and link it here. Inline text is kept if you switch back to “Write directly.”
-
-When a story is linked as intent, the panel shows which story is in use and an **Open** button to jump to it.
 
 ## Admin CLI
 
