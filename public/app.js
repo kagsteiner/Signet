@@ -52,6 +52,9 @@
   const intentReference = document.getElementById('intent-reference');
   const intentReferenceTitle = document.getElementById('intent-reference-title');
   const intentReferenceOpen = document.getElementById('intent-reference-open');
+  const intentForNote = document.getElementById('intent-for-note');
+  const intentForTitle = document.getElementById('intent-for-title');
+  const intentForOpen = document.getElementById('intent-for-open');
   const storyTitleInput = document.getElementById('story-title-input');
   const storyAuthorInput = document.getElementById('story-author-input');
   const storyPanel = document.getElementById('story-panel');
@@ -128,6 +131,7 @@
     setStoryPanelFields(currentStory);
     storyIntentEl.value = currentStory.story_intent || '';
     syncIntentSourceUI();
+    syncIntentForUI();
 
     const nextText = currentStory.content_markdown || '';
     const nextStart = Math.min(previousSelection.start, nextText.length);
@@ -142,6 +146,11 @@
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: previousScrollY, left: 0, behavior: 'auto' });
     });
+  }
+
+  function intentForSignature(story) {
+    if (!story || !Array.isArray(story.intent_for)) return '';
+    return story.intent_for.map((t) => `${t.id}:${t.label || ''}`).join('|');
   }
 
   async function refreshCurrentStoryIfUpdated() {
@@ -160,7 +169,8 @@
         || (nextStory.title || '') !== (currentStory.title || '')
         || (nextStory.author || '') !== (currentStory.author || '')
         || (nextStory.story_intent || '') !== (currentStory.story_intent || '')
-        || (nextStory.intent_story_id || '') !== (currentStory.intent_story_id || '');
+        || (nextStory.intent_story_id || '') !== (currentStory.intent_story_id || '')
+        || intentForSignature(nextStory) !== intentForSignature(currentStory);
       if (!hasChanged) return;
 
       applyStoryFromServer(nextStory);
@@ -188,6 +198,7 @@
     refreshStoryHeaderLabel(currentStory.content_markdown || '');
     storyIntentEl.value = currentStory.story_intent || '';
     syncIntentSourceUI();
+    syncIntentForUI();
     const storyText = currentStory.content_markdown || '';
     setEditorContent(storyText);
     resetHistoryForText(storyText);
@@ -761,6 +772,34 @@
   function openIntentStory() {
     if (!currentStory || !currentStory.intent_story_id) return;
     const targetId = currentStory.intent_story_id;
+    hideStoryPanel();
+    loadStory(targetId);
+  }
+
+  // --- Meta story indicator (this story is the intent for another story) ---
+  let intentForTargetId = null;
+
+  function syncIntentForUI() {
+    if (!intentForNote) return;
+    const targets = currentStory && Array.isArray(currentStory.intent_for)
+      ? currentStory.intent_for
+      : [];
+    if (targets.length === 0) {
+      intentForTargetId = null;
+      intentForNote.classList.add('hidden');
+      return;
+    }
+    const primary = targets[0];
+    intentForTargetId = primary.id;
+    let label = primary.label || 'another story';
+    if (targets.length > 1) label += ` (+${targets.length - 1} more)`;
+    intentForTitle.textContent = label;
+    intentForNote.classList.remove('hidden');
+  }
+
+  function openIntentForTarget() {
+    if (!intentForTargetId) return;
+    const targetId = intentForTargetId;
     hideStoryPanel();
     loadStory(targetId);
   }
@@ -1768,6 +1807,7 @@
   storyIntentEl.addEventListener('blur', saveIntents);
   intentSourceSelect.addEventListener('change', onIntentSourceChange);
   intentReferenceOpen.addEventListener('click', openIntentStory);
+  intentForOpen.addEventListener('click', openIntentForTarget);
   manageStoriesLink.addEventListener('click', () => {
     hideStoryPanel();
     showStoryOverlay();

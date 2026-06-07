@@ -78,6 +78,32 @@ function createApp(options = {}) {
     return referenced.content_markdown || '';
   }
 
+  function firstNonEmptyLine(text) {
+    if (typeof text !== 'string') return '';
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed) return trimmed;
+    }
+    return '';
+  }
+
+  // A short human label for a story: its title, else its opening line, else a fallback.
+  function storyDisplayLabel(story) {
+    if (!story) return 'Untitled story';
+    const title = typeof story.title === 'string' ? story.title.trim() : '';
+    if (title) return title;
+    const opening = firstNonEmptyLine(story.content_markdown || '');
+    if (opening) return opening.length > 80 ? `${opening.slice(0, 77)}...` : opening;
+    return 'Untitled story';
+  }
+
+  // Stories that use the given story as their intent. When non-empty, the given
+  // story is a "meta story" describing the plot for each returned target.
+  function getIntentTargets(userId, storyId) {
+    if (!storyId || typeof db.getStoriesUsingIntent !== 'function') return [];
+    return db.getStoriesUsingIntent(storyId, userId) || [];
+  }
+
   function getCachedChapterData(story) {
     const cached = chapterIndexCache.get(story.id);
     if (cached && cached.lastModified === story.last_modified && cached.content === story.content_markdown) {
@@ -93,11 +119,18 @@ function createApp(options = {}) {
     return parsed;
   }
 
-  function buildStoryResponse(story) {
+  function buildStoryResponse(story, userId) {
     const chapterData = getCachedChapterData(story);
+    const intentFor = userId
+      ? getIntentTargets(userId, story.id).map((target) => ({
+          id: target.id,
+          label: storyDisplayLabel(target),
+        }))
+      : [];
     return {
       ...story,
       chapters: chapterData.chapters,
+      intent_for: intentFor,
     };
   }
 
@@ -196,20 +229,20 @@ function createApp(options = {}) {
       author: typeof req.body.author === 'string' ? req.body.author : '',
       initialContent: isFirstStory ? db.FIRST_STORY_STARTER_MANUSCRIPT : '',
     });
-    res.json({ story: buildStoryResponse(story) });
+    res.json({ story: buildStoryResponse(story, req.userId) });
   });
 
   app.get('/api/stories/:id', requireAuth, (req, res) => {
     const story = db.getStory(req.params.id, req.userId);
     if (!story) return res.status(404).json({ error: 'Story not found' });
-    res.json({ story: buildStoryResponse(story) });
+    res.json({ story: buildStoryResponse(story, req.userId) });
   });
 
   app.put('/api/stories/:id', requireAuth, (req, res) => {
     const story = db.updateStory(req.params.id, req.userId, req.body);
     if (!story) return res.status(404).json({ error: 'Story not found' });
     chapterIndexCache.delete(story.id);
-    res.json({ story: buildStoryResponse(story) });
+    res.json({ story: buildStoryResponse(story, req.userId) });
   });
 
   app.delete('/api/stories/:id', requireAuth, (req, res) => {
@@ -242,8 +275,14 @@ function createApp(options = {}) {
     if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
     try {
-      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
-      const systemPrompt = prompts.buildContinuationPrompt(effectiveIntent, mode);
+      const intentTargets = getIntentTargets(req.userId, storyId);
+      let systemPrompt;
+      if (intentTargets.length > 0) {
+        systemPrompt = prompts.buildMetaStoryContinuationPrompt(storyDisplayLabel(intentTargets[0]), mode);
+      } else {
+        const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
+        systemPrompt = prompts.buildContinuationPrompt(effectiveIntent, mode);
+      }
       const userContent = prompts.buildContinuationUserMessage(precedingText, followingText, mode);
       const result = await ai.chat(systemPrompt, userContent, req.userTier, req.userId);
       res.json({ sentence: result });
@@ -259,8 +298,14 @@ function createApp(options = {}) {
     if (!precedingText) return res.status(400).json({ error: 'No text provided' });
 
     try {
-      const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
-      const systemPrompt = prompts.buildPremiumContinuationPrompt(effectiveIntent, mode);
+      const intentTargets = getIntentTargets(req.userId, storyId);
+      let systemPrompt;
+      if (intentTargets.length > 0) {
+        systemPrompt = prompts.buildMetaStoryPremiumContinuationPrompt(storyDisplayLabel(intentTargets[0]), mode);
+      } else {
+        const effectiveIntent = resolveStoryIntent(req.userId, storyId, storyIntent);
+        systemPrompt = prompts.buildPremiumContinuationPrompt(effectiveIntent, mode);
+      }
       const userContent = prompts.buildPremiumContinuationUserMessage(precedingText, followingText, mode);
       if (DEBUG_PREMIUM_CONTINUATION) {
         console.log('\n=== PREMIUM CONTINUATION — SYSTEM PROMPT ===\n' + systemPrompt);

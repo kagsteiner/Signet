@@ -251,6 +251,71 @@ test('continue endpoint falls back to inline intent when reference is missing', 
   assert.match(calls[0].systemPrompt, /inline fallback guidance/);
 });
 
+test('continue endpoint uses the meta-story prompt for an intent story', async (t) => {
+  const fixture = createTempDb();
+  const calls = [];
+  const ai = {
+    configured: true,
+    async chat(systemPrompt) {
+      calls.push({ systemPrompt });
+      return 'The plan deepens.';
+    },
+  };
+  const server = await startTestServer({ db: fixture.db, ai });
+  const auth = createAuthState(fixture.db, 'Meta Author');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const metaStory = fixture.db.createStory(auth.user.id, { title: 'The Plan', initialContent: 'Plot notes.' });
+  const mainStory = fixture.db.createStory(auth.user.id, { title: 'The Tide House', initialContent: 'Body' });
+  fixture.db.updateStory(mainStory.id, auth.user.id, { intent_story_id: metaStory.id });
+
+  const response = await requestJson(server.origin, '/api/continue', {
+    method: 'POST',
+    headers: { Cookie: auth.cookie },
+    body: {
+      precedingText: 'The harbour waited.',
+      followingText: '',
+      storyId: metaStory.id,
+      mode: 'default',
+    },
+  });
+
+  assert.equal(response.res.status, 200);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].systemPrompt, /meta story/);
+  assert.match(calls[0].systemPrompt, /titled "The Tide House"/);
+});
+
+test('story response exposes intent_for when another story references it', async (t) => {
+  const fixture = createTempDb();
+  const server = await startTestServer({ db: fixture.db });
+  const auth = createAuthState(fixture.db, 'Intent For User');
+  t.after(async () => {
+    await server.close();
+    fixture.cleanup();
+  });
+
+  const metaStory = fixture.db.createStory(auth.user.id, { title: 'The Plan', initialContent: 'Plot notes.' });
+  const mainStory = fixture.db.createStory(auth.user.id, { title: 'The Tide House', initialContent: 'Body' });
+  fixture.db.updateStory(mainStory.id, auth.user.id, { intent_story_id: metaStory.id });
+
+  const metaResponse = await requestJson(server.origin, `/api/stories/${metaStory.id}`, {
+    headers: { Cookie: auth.cookie },
+  });
+  assert.equal(metaResponse.res.status, 200);
+  assert.equal(metaResponse.json.story.intent_for.length, 1);
+  assert.equal(metaResponse.json.story.intent_for[0].id, mainStory.id);
+  assert.equal(metaResponse.json.story.intent_for[0].label, 'The Tide House');
+
+  const mainResponse = await requestJson(server.origin, `/api/stories/${mainStory.id}`, {
+    headers: { Cookie: auth.cookie },
+  });
+  assert.deepEqual(mainResponse.json.story.intent_for, []);
+});
+
 test('continue-premium endpoint uses chatPremium and parses best candidate', async (t) => {
   const fixture = createTempDb();
   const calls = [];

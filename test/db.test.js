@@ -72,6 +72,29 @@ test('story updates respect ownership and allowed fields', (t) => {
   assert.equal(cleared.intent_story_id, null);
 });
 
+test('getStoriesUsingIntent returns stories that reference a story as their intent', (t) => {
+  const fixture = createTempDb({ now: 100 });
+  t.after(() => fixture.cleanup());
+
+  const author = fixture.db.createUser('Meta Author');
+  const other = fixture.db.createUser('Other Author');
+  const metaStory = fixture.db.createStory(author.id, { title: 'Plan', initialContent: 'The plan' });
+  const storyA = fixture.db.createStory(author.id, { title: 'Story A', initialContent: 'A' });
+  const storyB = fixture.db.createStory(author.id, { title: 'Story B', initialContent: 'B' });
+
+  assert.deepEqual(fixture.db.getStoriesUsingIntent(metaStory.id, author.id), []);
+
+  fixture.db.updateStory(storyA.id, author.id, { intent_story_id: metaStory.id });
+  fixture.db.updateStory(storyB.id, author.id, { intent_story_id: metaStory.id });
+
+  const referencing = fixture.db.getStoriesUsingIntent(metaStory.id, author.id);
+  const ids = referencing.map((s) => s.id).sort();
+  assert.deepEqual(ids, [storyA.id, storyB.id].sort());
+
+  // Scoped to owner: another user sees nothing.
+  assert.deepEqual(fixture.db.getStoriesUsingIntent(metaStory.id, other.id), []);
+});
+
 test('createDb migrates existing installs with missing author and tier columns', (t) => {
   const fixture = createTempDb({ now: 100 });
   t.after(() => fixture.cleanup());

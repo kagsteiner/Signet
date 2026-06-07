@@ -35,6 +35,10 @@
         <input id="story-author-input" type="text" placeholder="Author" autocomplete="off" spellcheck="false">
       </section>
       <section class="story-panel-section story-panel-intent">
+        <div id="intent-for-note" class="intent-for-note hidden">
+          <span class="intent-for-text">This story is the intent for “<span id="intent-for-title"></span>”.</span>
+          <button id="intent-for-open" class="intent-reference-open" type="button">Open</button>
+        </div>
         <label for="story-intent">Story Intent</label>
         <select id="intent-source-select" class="intent-source-select" aria-label="Story intent source">
           <option value="">Write directly</option>

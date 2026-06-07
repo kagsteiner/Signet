@@ -209,6 +209,15 @@ function createDb(options = {}) {
     return getDb().prepare('SELECT * FROM stories WHERE id = ? AND user_id = ?').get(storyId, userId) || null;
   }
 
+  // Stories that reference the given story as their intent (i.e. this story is a
+  // "meta story" describing the plot for each returned story).
+  function getStoriesUsingIntent(storyId, userId) {
+    if (!storyId) return [];
+    return getDb()
+      .prepare('SELECT id, title, author, content_markdown, last_modified FROM stories WHERE intent_story_id = ? AND user_id = ? ORDER BY last_modified DESC')
+      .all(storyId, userId);
+  }
+
   function updateStory(storyId, userId, fields) {
     const d = getDb();
     const allowed = ['title', 'author', 'content_markdown', 'story_intent', 'intent_story_id'];
@@ -258,6 +267,7 @@ function createDb(options = {}) {
     createStory,
     getUserStories,
     getStory,
+    getStoriesUsingIntent,
     updateStory,
     deleteStory,
     SESSION_DURATION_MS,

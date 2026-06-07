@@ -6,6 +6,8 @@ const {
   buildContinuationUserMessage,
   buildPremiumContinuationPrompt,
   buildPremiumContinuationUserMessage,
+  buildMetaStoryContinuationPrompt,
+  buildMetaStoryPremiumContinuationPrompt,
   parsePremiumContinuationResult,
   buildRecallPrompt,
   buildRecallUserMessage,
@@ -80,6 +82,28 @@ test('buildPremiumContinuationUserMessage switches shape by mode', () => {
   assert.match(defaultMsg, /three candidate sentences/);
   assert.match(midMsg, /three candidate continuation texts/);
   assert.match(paraMsg, /three candidate opening sentences/);
+});
+
+test('buildMetaStoryContinuationPrompt frames the text as a plan for another story', () => {
+  const prompt = buildMetaStoryContinuationPrompt('The Tide House', 'default');
+  const midPrompt = buildMetaStoryContinuationPrompt('', 'mid_sentence');
+
+  assert.match(prompt, /meta story/);
+  assert.match(prompt, /titled "The Tide House"/);
+  assert.match(prompt, /NOT the prose manuscript/);
+  assert.match(prompt, /story being planned/);
+  assert.match(prompt, /exactly one sentence/i);
+  assert.match(midPrompt, /Mode: mid-sentence completion/);
+});
+
+test('buildMetaStoryPremiumContinuationPrompt keeps the JSON evaluation shape', () => {
+  const prompt = buildMetaStoryPremiumContinuationPrompt('The Tide House', 'default');
+
+  assert.match(prompt, /meta story/);
+  assert.match(prompt, /titled "The Tide House"/);
+  assert.match(prompt, /PHASE 1/);
+  assert.match(prompt, /PHASE 2/);
+  assert.match(prompt, /"candidates":/);
 });
 
 test('parsePremiumContinuationResult picks highest-scoring candidate', () => {
