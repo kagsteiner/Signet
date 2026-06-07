@@ -29,6 +29,7 @@ When you’re writing and you get stuck, look for the Gem at the end of a paragr
 Click it to receive exactly one continuation sentence.
 Undo if it’s not yours.
 Type CTRL/CMD + Enter to continue anywhere.
+Type CTRL/CMD + SHIFT + Enter for a deeply thought out continuation.
 
 ---
 Chapters and intent
@@ -43,6 +44,7 @@ The line right after a divider becomes the chapter title (like this one).
 
 At the top, open the story panel to keep a Story Intent.
 It's there to help the Gem stay in the right voice — quietly, without noise.
+For a larger intent, another story can hold the plan — write it there, and point to it from the panel.
 `;
 
 const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

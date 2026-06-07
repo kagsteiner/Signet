@@ -63,6 +63,17 @@ npm start
 DEEPSEEK_API_KEY=... ANTHROPIC_API_KEY=... OPENAI_API_KEY=... npm start
 ```
 
+## Story intent
+
+Each story can carry a **story intent** — notes on direction, planned chapters, and tone. The Gem, rewrite, and recall use it as background guidance (not as established fact in the manuscript).
+
+Open the **story panel** (click the story title at the top) and find **Story Intent**. You can either:
+
+- **Write directly** — enter intent in the textarea, as before.
+- **Use another story** — choose one of your other stories from the dropdown. That story’s manuscript becomes this story’s intent, so you can write a long or LLM-assisted intent in the full editor and link it here. Inline text is kept if you switch back to “Write directly.”
+
+When a story is linked as intent, the panel shows which story is in use and an **Open** button to jump to it.
+
 ## Admin CLI
 
 ```bash
