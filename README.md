@@ -2,6 +2,37 @@
 
 A private, invitation-only writing studio. Minimal, literary, calm.
 
+## Core features
+
+Signet is a single flowing manuscript editor. AI appears only at quiet moments — no chat, no side panels.
+
+### The Gem (◇)
+
+When you finish a paragraph with a full stop and pause, a small **◇** appears below the line. Click it to receive **exactly one** continuation sentence, inserted as the next paragraph. Undo works normally.
+
+The Gem matches tense, point of view, and tone of what you have written. It uses **story intent** (see below) as directional guidance, not as established fact.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| **⌘↩** / **Ctrl+Enter** | Continue from the cursor (same as the Gem, but works anywhere in the text) |
+| **⌘⇧↩** / **Ctrl+Shift+Enter** | **Premium** continuation — the model drafts three candidate sentences, scores them for style, metaphor, and plot, and inserts the best one |
+
+On first use, a brief hint mentions ⌘↩ / Ctrl+Enter.
+
+### Transform (rewrite)
+
+Select a passage of text. A small inline field appears with the placeholder **“Transform…”**. Type an instruction (e.g. “make this quieter”, “tighten the rhythm”). Signet returns a rewritten version, shows a **diff preview**, and you **Accept** or **Reject**. No chat thread — the manuscript stays central.
+
+### Recall
+
+**Double-click** a single word (or **long-press** on mobile) to surface a brief reminder of what that word means *in your story* — a character, a place, a name you have not seen in a while. The note appears in a small floating line near the word and fades when you type or click away. If the manuscript does not establish a clear meaning, nothing is shown. Recall uses a fast OpenAI mini model and is separate from the tier-based Gem and Transform stack.
+
+### Story panel and chapters
+
+Click the **story title** at the top to open the story panel: title, author, **story intent**, and a chapter overview when the manuscript has several chapters. Chapters are marked with divider lines (`*`, `---`, or `-*-`); the line after a divider becomes the chapter title.
+
 ## Setup
 
 ```bash
