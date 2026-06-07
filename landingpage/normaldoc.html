@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signet — Documentation</title>
+  <meta name="description" content="Complete documentation for Signet: onboarding, editing, the Gem, Transform, Recall, chapters, story intent, and more." />
+
+  <style>
+    :root{
+      --paper: #f6f1e7;
+      --ink: #1f1f1f;
+      --muted: rgba(31,31,31,0.68);
+      --hairline: rgba(31,31,31,0.12);
+      --maxw: 62ch;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+      line-height: 1.6;
+    }
+
+    .wrap {
+      min-height: 100%;
+      padding: 8vh 6vw 12vh;
+    }
+
+    main {
+      width: min(100%, var(--maxw));
+      margin: 0 auto;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      margin-bottom: 1.8rem;
+    }
+
+    .mark img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      opacity: 0.95;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 4.5vw, 3.2rem);
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin: 0;
+      text-align: center;
+    }
+
+    .byline {
+      text-align: center;
+      margin-top: 0.4rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 1.2rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      text-decoration: none;
+      border-bottom: 1px solid var(--hairline);
+      padding-bottom: 2px;
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .back-link:focus, .back-link:hover {
+      color: var(--ink);
+      border-bottom-color: rgba(31,31,31,0.35);
+    }
+
+    .spacer {
+      height: 2.2rem;
+    }
+
+    .ornament {
+      margin: 2rem 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .doc-intro {
+      font-size: 1.1rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    nav.toc {
+      margin-bottom: 3rem;
+      padding: 1.4rem 1.6rem;
+      border: 1px solid var(--hairline);
+    }
+
+    nav.toc h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.8rem 0;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-left: 1.3rem;
+    }
+
+    nav.toc li {
+      margin: 0.35rem 0;
+    }
+
+    nav.toc a {
+      color: var(--ink);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    nav.toc a:focus, nav.toc a:hover {
+      border-bottom-color: var(--hairline);
+    }
+
+    section {
+      margin-bottom: 2.8rem;
+    }
+
+    section h2 {
+      font-size: 1.55rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      letter-spacing: 0.1px;
+    }
+
+    section h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 1.6rem 0 0.6rem 0;
+    }
+
+    section p {
+      margin: 0 0 1rem 0;
+      font-size: 1.05rem;
+    }
+
+    section ul, section ol {
+      margin: 0 0 1rem 0;
+      padding-left: 1.4rem;
+      font-size: 1.05rem;
+    }
+
+    section li {
+      margin: 0.35rem 0;
+    }
+
+    kbd {
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+      font-size: 0.88em;
+      padding: 0.1em 0.35em;
+      border: 1px solid var(--hairline);
+      border-radius: 3px;
+      background: rgba(255,255,255,0.35);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.2rem 0;
+      font-size: 1rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--hairline);
+      vertical-align: top;
+    }
+
+    th {
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    code {
+      font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+      font-size: 0.92em;
+    }
+
+    .note {
+      margin: 1.2rem 0;
+      padding: 0.9rem 1.1rem;
+      border-left: 2px solid var(--hairline);
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <main>
+
+      <div class="mark" aria-hidden="true">
+        <img src="signet-icon.png" alt="" />
+      </div>
+
+      <h1>Signet</h1>
+      <div class="byline">Documentation</div>
+      <a class="back-link" href="neocitiespage.html">← Back to the quiet version</a>
+
+      <div class="spacer"></div>
+
+      <p class="doc-intro">
+        This page describes everything Signet does — plainly, in order, without poetry.
+      </p>
+
+      <nav class="toc" aria-label="Table of contents">
+        <h2>Contents</h2>
+        <ol>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#getting-in">Getting in</a></li>
+          <li><a href="#first-launch">First launch</a></li>
+          <li><a href="#manuscript-editor">The manuscript editor</a></li>
+          <li><a href="#stories">Stories</a></li>
+          <li><a href="#chapters">Chapters</a></li>
+          <li><a href="#story-intent">Story intent</a></li>
+          <li><a href="#the-gem">The Gem (◇)</a></li>
+          <li><a href="#keyboard-shortcuts">Keyboard shortcuts</a></li>
+          <li><a href="#transform">Transform (rewrite)</a></li>
+          <li><a href="#recall">Recall</a></li>
+          <li><a href="#undo-redo">Undo and redo</a></li>
+          <li><a href="#export">Export</a></li>
+          <li><a href="#multi-device">Working across devices</a></li>
+          <li><a href="#what-signet-is-not">What Signet is not</a></li>
+        </ol>
+      </nav>
+
+      <section id="overview">
+        <h2>Overview</h2>
+        <p>
+          Signet is a private, invitation-only writing studio for long-form storytelling.
+          You open it and land directly inside a manuscript — no dashboard, no toolbars, no chat interface.
+        </p>
+        <p>
+          The text is the center of the experience. AI assistance appears only at quiet moments:
+          a single continuation sentence when you ask for one, a rewrite when you select a passage,
+          or a brief memory when you double-click a word.
+        </p>
+        <p>
+          Your work is stored on the server and auto-saved. You can maintain multiple stories,
+          switch between them, and export when you need a file on your machine.
+        </p>
+      </section>
+
+      <section id="getting-in">
+        <h2>Getting in</h2>
+        <p>
+          Signet is invitation-only. There is no public signup, no password, and no email verification flow.
+        </p>
+        <h3>Your personal access URL</h3>
+        <p>
+          When you are invited, you receive a permanent personal URL of the form:
+        </p>
+        <p><code>https://your-signet-host/enter/&lt;very-long-random-key&gt;</code></p>
+        <p>
+          Bookmark this URL. It is your master key to Signet. Keep it private.
+        </p>
+        <h3>Sessions</h3>
+        <p>
+          Visiting your access URL creates a session (stored in a secure cookie) that lasts 30 days.
+          While the session is active, you can open Signet directly without using the long URL again.
+        </p>
+        <p>
+          When a session expires, simply revisit your personal access URL. No admin action is required.
+        </p>
+        <p class="note">
+          If your access key is regenerated by an administrator, all existing sessions are revoked
+          and you will need a new URL.
+        </p>
+      </section>
+
+      <section id="first-launch">
+        <h2>First launch</h2>
+        <p>After you sign in, Signet opens a story immediately — you never see a dashboard.</p>
+        <ul>
+          <li>If you have no stories yet, Signet creates one called <em>Untitled</em>.</li>
+          <li>If you have exactly one story, that story opens.</li>
+          <li>If you have several stories, the most recently edited one opens.</li>
+        </ul>
+        <p>
+          The editor shows a placeholder — “Begin writing…” — until you type.
+          The story title appears at the top left; it updates from your manuscript’s first line
+          until you set an explicit title in the story panel.
+        </p>
+      </section>
+
+      <section id="manuscript-editor">
+        <h2>The manuscript editor</h2>
+        <p>
+          Signet is a single flowing document. There is no formatting toolbar, no visible save button,
+          and no side panels competing with the text.
+        </p>
+        <h3>Appearance</h3>
+        <ul>
+          <li>Warm paper-toned background</li>
+          <li>Wide margins and generous line height</li>
+          <li>Literary serif typography</li>
+          <li>Minimal chrome: story title (top left), save indicator (top right)</li>
+        </ul>
+        <h3>Auto-save</h3>
+        <p>
+          Every change is saved automatically after a short pause (about 1.5 seconds).
+          The indicator in the top-right corner shows <em>Saving…</em> while a save is in progress,
+          then clears when done. You do not need to press Save.
+        </p>
+        <h3>Storage format</h3>
+        <p>
+          Manuscripts are stored as plain text with lightweight structure.
+          Chapter dividers and titles are part of the text itself (see Chapters below).
+          Story intent and metadata (title, author) are stored separately and never appear in the visible manuscript.
+        </p>
+        <h3>Spellcheck</h3>
+        <p>Browser spellcheck is enabled in the editor.</p>
+      </section>
+
+      <section id="stories">
+        <h2>Stories</h2>
+        <p>
+          Each account can hold multiple stories. You switch between them without leaving the writing surface.
+        </p>
+        <h3>Story panel</h3>
+        <p>
+          Click the story title at the top left to open the <strong>story panel</strong>. Here you can:
+        </p>
+        <ul>
+          <li>Set the story <strong>title</strong> and <strong>author</strong> (used in exports and the header label)</li>
+          <li>Edit <strong>story intent</strong> (see below)</li>
+          <li>Jump to chapters when the manuscript has more than two</li>
+          <li>Open <strong>Manage Stories…</strong> to switch or create stories</li>
+        </ul>
+        <p>
+          Click outside the panel or press <kbd>Esc</kbd> to close it.
+        </p>
+        <h3>Managing stories</h3>
+        <p>
+          From the story panel, choose <strong>Manage Stories…</strong> (or use the story overlay directly).
+          The overlay lists all your stories with relative edit dates (<em>Today</em>, <em>Yesterday</em>, <em>3 days ago</em>, etc.).
+          Click a story to open it immediately.
+        </p>
+        <h3>New story</h3>
+        <p>
+          In the stories overlay, click <strong>+ New Story</strong> to create a blank manuscript and switch to it.
+        </p>
+        <h3>Display name</h3>
+        <p>
+          The header shows the story’s explicit title if set; otherwise it uses the first non-empty line of the manuscript,
+          truncated if long. Untitled stories show as <em>Story</em> in the list.
+        </p>
+      </section>
+
+      <section id="chapters">
+        <h2>Chapters</h2>
+        <p>
+          Chapters are marked inside the manuscript with divider lines. Supported dividers:
+        </p>
+        <ul>
+          <li><code>*</code></li>
+          <li><code>---</code></li>
+          <li><code>-*-</code></li>
+        </ul>
+        <p>
+          En-dashes and em-dashes typed on mobile keyboards are normalized to <code>---</code>.
+          The first non-empty line after a divider becomes the chapter title and is styled distinctly in the editor.
+        </p>
+        <h3>First chapter</h3>
+        <p>
+          If the manuscript begins without a divider, the first line can serve as the opening chapter title
+          when there is at least one more line of text in that chapter.
+        </p>
+        <h3>Chapter navigation</h3>
+        <p>
+          When a story has more than two chapters, the story panel shows a chapter list.
+          Click a chapter name to scroll the manuscript to that section (with a brief highlight).
+        </p>
+        <h3>Export and chapters</h3>
+        <p>
+          When you export as Markdown, chapter titles become <code>##</code> headings (or <code>#</code> if the story has no title).
+          Divider lines are omitted from the export.
+        </p>
+      </section>
+
+      <section id="story-intent">
+        <h2>Story intent</h2>
+        <p>
+          Each story can carry hidden <strong>story intent</strong> — notes on direction, planned chapters, tone,
+          or anything you want the AI to keep in mind. Intent is never rendered in the manuscript.
+        </p>
+        <p>
+          The Gem, Transform, and Recall all receive story intent as background guidance.
+          It steers suggestions; it is not treated as established fact in your text.
+        </p>
+        <h3>Write directly</h3>
+        <p>
+          Open the story panel and enter intent in the <strong>Story Intent</strong> textarea.
+          Changes auto-save like the manuscript.
+        </p>
+        <h3>Use another story as intent</h3>
+        <p>
+          In the intent source dropdown, choose one of your other stories.
+          That story’s full manuscript becomes this story’s intent — useful when you want to draft
+          a long or AI-assisted outline in the main editor and link it here.
+        </p>
+        <p>
+          When linked, the panel shows which story is in use and an <strong>Open</strong> button to jump to it.
+          Switching back to <em>Write directly</em> keeps any inline text you had entered.
+        </p>
+        <h3>Intent-for indicator</h3>
+        <p>
+          If another story uses <em>this</em> story as its intent, the panel shows a note with an <strong>Open</strong>
+          button to go to that target story.
+        </p>
+      </section>
+
+      <section id="the-gem">
+        <h2>The Gem (◇)</h2>
+        <p>
+          The Gem is Signet’s core AI feature. It offers exactly one continuation sentence — no chat, no explanation, no multiple options (unless you use premium continuation; see Keyboard shortcuts).
+        </p>
+        <h3>When it appears</h3>
+        <p>
+          After you stop typing for about one second, a small <strong>◇</strong> mark may appear
+          near the end of your manuscript. It hides while you type and reappears after idle time.
+        </p>
+        <h3>When you click it</h3>
+        <ol>
+          <li>The Gem disappears while the sentence is generated.</li>
+          <li>Exactly one sentence is inserted as the next paragraph (or appended to the current line as appropriate).</li>
+          <li>The cursor moves to the end of the new text.</li>
+          <li>The Gem may reappear after you pause again.</li>
+        </ol>
+        <h3>What the AI follows</h3>
+        <p>The continuation is written to:</p>
+        <ul>
+          <li>Match tense, point of view, and tone of your existing text</li>
+          <li>Stay roughly one sentence (about 25–30 words)</li>
+          <li>Avoid clichés, exposition dumps, meta commentary, and summarizing</li>
+          <li>Read as a natural next beat, not as an assistant speaking</li>
+        </ul>
+        <p>Story intent, if set, provides directional guidance only.</p>
+        <h3>Undo</h3>
+        <p>
+          If the sentence is not yours, undo works normally (<kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd>).
+        </p>
+        <h3>First-use hint</h3>
+        <p>
+          The first time you use the Gem (or a keyboard continuation), a brief grey hint appears:
+          “Tip: ⌘↩ continues anywhere.” It is shown once and stored in your browser.
+        </p>
+      </section>
+
+      <section id="keyboard-shortcuts">
+        <h2>Keyboard shortcuts</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Shortcut</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><kbd>⌘↩</kbd> / <kbd>Ctrl+Enter</kbd></td>
+              <td>
+                <strong>Continue from the cursor</strong> — same as clicking the Gem, but works anywhere in the text.
+                The Gem briefly darkens as feedback. Continuation mode adapts to context (mid-sentence, paragraph start, etc.).
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>⌘⇧↩</kbd> / <kbd>Ctrl+Shift+Enter</kbd></td>
+              <td>
+                <strong>Premium continuation</strong> — the model drafts three candidate sentences,
+                scores them for style, metaphor, and plot, and inserts the best one.
+              </td>
+            </tr>
+            <tr>
+              <td><kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd></td>
+              <td>Undo (up to 100 steps in the editor)</td>
+            </tr>
+            <tr>
+              <td><kbd>⌘⇧Z</kbd> / <kbd>Ctrl+Shift+Z</kbd> or <kbd>Ctrl+Y</kbd></td>
+              <td>Redo</td>
+            </tr>
+            <tr>
+              <td><kbd>Esc</kbd></td>
+              <td>Close the story panel, stories overlay, or Transform dialog</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="note">
+          On Mac, shortcuts use <kbd>⌘</kbd> (Command). On Windows and Linux, use <kbd>Ctrl</kbd>.
+        </p>
+      </section>
+
+      <section id="transform">
+        <h2>Transform (rewrite)</h2>
+        <p>
+          Transform lets you rewrite a selected passage with a short instruction — without opening a chat thread.
+        </p>
+        <h3>How to use it</h3>
+        <ol>
+          <li>Select at least three characters of text in the manuscript.</li>
+          <li>A small inline field appears with the placeholder <strong>“Transform…”</strong>.</li>
+          <li>Type an instruction (e.g. “make this quieter”, “tighten the rhythm”, “more concrete”).</li>
+          <li>Press <kbd>Enter</kbd> to submit.</li>
+          <li>Signet returns a rewritten version and shows a <strong>diff preview</strong> (original struck through, new text inserted).</li>
+          <li>Click <strong>Accept</strong> to replace the selection, or <strong>Reject</strong> to dismiss.</li>
+        </ol>
+        <h3>Mobile</h3>
+        <p>
+          On phones and tablets, the Transform dialog is repositioned toward the top or bottom of the screen
+          so it stays visible above the keyboard and does not cover your selection.
+        </p>
+        <h3>Dismissing</h3>
+        <p>
+          Press <kbd>Esc</kbd>, click <strong>Reject</strong>, or start typing in the manuscript (outside the Transform field) to close the dialog.
+        </p>
+        <p class="note">
+          Selecting a single word triggers Recall instead of Transform (see below).
+        </p>
+      </section>
+
+      <section id="recall">
+        <h2>Recall</h2>
+        <p>
+          Recall surfaces a brief reminder of what a word means <em>in your story</em> — a character you have not seen in a while,
+          a place name, a term specific to your world. It is not analysis, not a character database, and not a chat.
+        </p>
+        <h3>How to trigger it</h3>
+        <ul>
+          <li><strong>Desktop:</strong> double-click a single word</li>
+          <li><strong>Mobile:</strong> long-press a single word (about half a second)</li>
+        </ul>
+        <h3>What you see</h3>
+        <ul>
+          <li>A subtle pulse near the word while the request runs (no spinner, no “Loading…” text)</li>
+          <li>If a result arrives in time, a small floating note (at most a few lines) appears beside the word</li>
+          <li>The note fades when you type, click elsewhere, or after a few seconds</li>
+        </ul>
+        <h3>When nothing appears</h3>
+        <p>
+          If the manuscript does not establish a clear meaning for that word, or the request takes too long,
+          nothing is shown. There is no error message — a late result never pops in after the moment has passed.
+        </p>
+        <h3>Story intent</h3>
+        <p>Recall also receives story intent as background context, separate from the tier-based models used for the Gem and Transform.</p>
+      </section>
+
+      <section id="undo-redo">
+        <h2>Undo and redo</h2>
+        <p>
+          Signet keeps an undo history of up to 100 editing steps. Undo and redo apply to typing,
+          Gem continuations, accepted Transform rewrites, and other text changes.
+        </p>
+        <p>
+          Programmatic updates (continuations, accepted rewrites) are recorded as single undo steps
+          so you can revert them cleanly.
+        </p>
+      </section>
+
+      <section id="export">
+        <h2>Export</h2>
+        <p>
+          Open the stories overlay (via <strong>Manage Stories…</strong> in the story panel) and choose:
+        </p>
+        <ul>
+          <li><strong>Export as Markdown</strong> — chapter titles as headings, title and author as a preface when set</li>
+          <li><strong>Export as Plain Text</strong> — manuscript with optional title and author lines at the top</li>
+        </ul>
+        <p>
+          The file downloads to your device. The filename is derived from the story title or the first line of the manuscript.
+        </p>
+      </section>
+
+      <section id="multi-device">
+        <h2>Working across devices</h2>
+        <p>
+          Signet is server-backed. The same story can be opened on multiple devices signed in with your access URL.
+        </p>
+        <p>
+          When you return to a tab or window (focus, visibility change, or page show), Signet checks whether
+          the server has a newer version of the current story. If your local copy has no unsaved changes and
+          the remote copy is newer, the editor refreshes and briefly shows <em>Updated</em> in the save indicator.
+        </p>
+        <p class="note">
+          If you have unsaved local edits, Signet will not overwrite them with a remote refresh.
+          Save or wait for auto-save before switching devices to avoid conflicts.
+        </p>
+      </section>
+
+      <section id="what-signet-is-not">
+        <h2>What Signet is not</h2>
+        <p>By design, Signet omits many features common in other writing tools:</p>
+        <ul>
+          <li>No public signup or password login</li>
+          <li>No email system inside the app</li>
+          <li>No dashboard or project gallery on launch</li>
+          <li>No formatting toolbar (bold, italic, fonts, etc.)</li>
+          <li>No chat interface or AI side panel</li>
+          <li>No collaboration or shared editing</li>
+          <li>No character sheets, plot boards, or world-building databases</li>
+          <li>No installable PWA or offline mode — the server is the source of truth</li>
+        </ul>
+        <p>
+          Signet is meant to feel like opening a manuscript, not using software.
+          AI appears only when you invoke it — at the Gem, in a selection, or on a word.
+        </p>
+      </section>
+
+      <div class="ornament">✶</div>
+
+      <p style="text-align: center; color: var(--muted); font-size: 1rem;">
+        Signet is invitation-only.
+        <br />
+        To request access, write to
+        <a class="back-link" href="mailto:signet@agsteiner.de" style="display: inline; margin: 0;">signet@agsteiner.de</a>.
+      </p>
+
+      <footer>
+        <span aria-hidden="true">✶</span>
+      </footer>
+
+    </main>
+  </div>
+</body>
+</html>

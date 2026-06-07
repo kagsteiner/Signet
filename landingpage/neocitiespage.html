@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signet — a private manuscript space</title>
+  <meta name="description" content="Signet is a quiet, invitation-only manuscript space for long-form storytelling. No dashboards. No toolbars. Just text—and one sentence at a time when you need it." />
+
+  <style>
+    :root{
+      --paper: #f6f1e7;
+      --ink: #1f1f1f;
+      --muted: rgba(31,31,31,0.68);
+      --hairline: rgba(31,31,31,0.12);
+      --maxw: 62ch;
+    }
+
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+      line-height: 1.6;
+    }
+
+    .wrap {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 8vh 6vw;
+    }
+
+    main {
+      width: min(100%, var(--maxw));
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      margin-bottom: 1.8rem;
+    }
+
+    .mark img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      opacity: 0.95;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 4.5vw, 3.2rem);
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin: 0;
+      text-align: center;
+    }
+
+    .byline {
+      text-align: center;
+      margin-top: 0.4rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .spacer {
+      height: 2.2rem;
+    }
+
+    .copy {
+      font-size: 1.1rem;
+    }
+
+    .copy p {
+      margin: 0 0 1.1rem 0;
+    }
+
+    .ornament {
+      margin: 2rem 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .email {
+      margin-top: 0.9rem;
+      display: inline-block;
+      padding-bottom: 2px;
+      border-bottom: 1px solid var(--hairline);
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .email:focus, .email:hover {
+      border-bottom-color: rgba(31,31,31,0.35);
+    }
+
+    /* --- Video Section --- */
+
+    .videos {
+      margin-top: 2.5rem;
+    }
+
+    .video-intro {
+      text-align: center;
+      color: var(--muted);
+      margin-bottom: 2rem;
+    }
+
+    .video-label {
+      margin: 2rem 0 0.6rem 0;
+      font-style: italic;
+      color: var(--muted);
+    }
+
+    .video-thumb {
+      position: relative;
+      cursor: pointer;
+      margin-bottom: 2rem;
+    }
+
+    .video-thumb img {
+      width: 100%;
+      border: 1px solid var(--hairline);
+      display: block;
+    }
+
+    .play-mark {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 2rem;
+      color: rgba(0,0,0,0.6);
+      pointer-events: none;
+    }
+
+    .video-thumb:hover .play-mark {
+      color: rgba(0,0,0,0.85);
+    }
+
+    /* --- Overlay --- */
+
+    .video-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: grid;
+      place-items: center;
+      z-index: 1000;
+    }
+
+    .video-container {
+      width: min(92vw, 1000px);
+    }
+
+    .video-container video {
+      width: 100%;
+      display: block;
+    }
+
+    .doc-link-wrap {
+      margin-top: 3rem;
+      text-align: center;
+    }
+
+    .doc-link {
+      color: var(--muted);
+      font-style: italic;
+      text-decoration: none;
+      border-bottom: 1px solid var(--hairline);
+      padding-bottom: 2px;
+    }
+
+    .doc-link:focus, .doc-link:hover {
+      color: var(--ink);
+      border-bottom-color: rgba(31,31,31,0.35);
+    }
+
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <main>
+
+      <div class="mark" aria-hidden="true">
+        <img src="signet-icon.png" alt="" />
+      </div>
+
+      <h1>Signet</h1>
+      <div class="byline">by Karlheinz Agsteiner</div>
+
+      <div class="spacer"></div>
+
+      <div class="copy">
+        <p>A private manuscript space.</p>
+
+        <p>
+          Signet is a quiet writing studio for long-form storytelling.
+          <br />No dashboards.
+          <br />No toolbars.
+          <br />No noise.
+        </p>
+
+        <p>Just text.</p>
+
+        <p>And a single mark at the end of a paragraph.</p>
+
+        <p>
+          When you’re stuck, press it.
+          <br />You’ll receive one continuation sentence.
+        </p>
+
+        <p>Undo if it’s not yours.</p>
+
+        <div class="ornament">✶</div>
+
+        <p>Signet is invitation-only.</p>
+
+        <p>
+          If you would like to enter, write to:
+          <br />
+          <a class="email" href="mailto:signet@agsteiner.de">
+            signet@agsteiner.de
+          </a>
+        </p>
+      </div>
+
+      <div class="ornament">✶</div>
+
+      <div class="videos">
+        <p class="video-intro">See Signet in motion.</p>
+
+        
+        <p class="video-label">Writing.</p>
+        <div class="video-thumb" data-video="transformer-session.mp4">
+          <img src="transformer-poster.jpg" alt="Signet transformer preview">
+          <div class="play-mark">✶</div>
+        </div>
+        
+        <p class="video-label">Continuing.</p>
+        <div class="video-thumb" data-video="writing-session.mp4">
+          <img src="writing-poster.jpg" alt="Signet writing session preview">
+          <div class="play-mark">✶</div>
+        </div>
+
+      </div>
+
+      <p class="doc-link-wrap">
+        <a class="doc-link" href="normaldoc.html">But I want a real, normal, documentation describing the features!</a>
+      </p>
+
+      <footer>
+        <span aria-hidden="true">✶</span>
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    document.querySelectorAll('.video-thumb').forEach(el => {
+      el.addEventListener('click', () => {
+        const src = el.dataset.video;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'video-overlay';
+        overlay.innerHTML = `
+          <div class="video-container">
+            <video controls autoplay>
+              <source src="${src}" type="video/mp4">
+            </video>
+          </div>
+        `;
+
+        overlay.addEventListener('click', () => overlay.remove());
+        document.body.appendChild(overlay);
+      });
+    });
+  </script>
+
+</body>
+</html>
