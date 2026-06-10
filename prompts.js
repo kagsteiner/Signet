@@ -8,7 +8,7 @@ Rules:
 - Maximum 25-30 words.
 - Match the tense, POV, and tone of the preceding text.
 - Avoid clichés, exposition dumps, meta commentary, and summarizing.
-- The sentence must feel like a natural next beat in the story.
+- The sentence must feel like a natural next beat in the story, in the same style as the preceding text.
 - Never explain yourself. Never add quotes or attribution to your output.
 Story intent: The Story Intent may contain future planned events or outcomes.
 Do NOT prematurely realize events described in the Story Intent.
